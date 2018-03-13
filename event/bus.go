@@ -22,12 +22,12 @@ func NewEventBus() *EventBus {
 	return &EventBus{}
 }
 
-func (eb *EventBus) Subscribe(event string, channel chan interface{}) {
+func (eb *EventBus) Sub(event string, channel chan interface{}) {
 	slot := &slot{channel}
 	eb.subs.Store(event, slot)
 }
 
-func (eb *EventBus) Unsubscribe(event string, channel chan interface{}) error {
+func (eb *EventBus) Unsub(event string, channel chan interface{}) error {
 	slots, ok := eb.subs.Load(event)
 	if !ok {
 		return ErrEventNotFound
