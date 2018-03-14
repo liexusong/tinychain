@@ -178,7 +178,7 @@ func (s *Stream) readLoop() {
 		message *pb.Message
 		dataLen uint32
 		buf     = make([]byte, 1024*4)
-		msgBuf   = make([]byte, 1024)
+		msgBuf  = make([]byte, 1024)
 	)
 
 	for {

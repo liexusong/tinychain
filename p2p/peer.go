@@ -26,7 +26,6 @@ type Peer struct {
 	context    context.Context
 	respCh     chan *pb.Message // Response channel. Receive message from stream.
 	quitCh     chan struct{}
-	respMutex  sync.Mutex
 
 	timeout time.Duration // Timeout of per connection
 }
