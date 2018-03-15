@@ -64,7 +64,7 @@ func GenAddrByPubkey(key crypto.PubKey) (common.Address, error) {
 		log.Errorf("Failed to decode pubkey to bytes, %s", err)
 		return addr, ErrGenAddress
 	}
-	pubkey = pubkey[2:]
+	pubkey = pubkey[1:]
 	h := common.Sha256(pubkey)
 	hash := h[len(h)-common.AddressLength:]
 	addr = common.HashToAddr(common.Sha256(hash))
