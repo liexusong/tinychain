@@ -64,6 +64,7 @@ func GenAddrByPubkey(key crypto.PubKey) (common.Address, error) {
 		log.Errorf("Failed to decode pubkey to bytes, %s", err)
 		return addr, ErrGenAddress
 	}
+	pubkey = pubkey[2:]
 	h := common.Sha256(pubkey)
 	hash := h[len(h)-common.AddressLength:]
 	addr = common.HashToAddr(common.Sha256(hash))
@@ -129,8 +130,6 @@ func (tw *TinyWallet) CreateAccount() (*Account, error) {
 
 // Unlock the account, register key in wallet
 func (tw *TinyWallet) Unlock(address common.Address, key crypto.PrivKey) error {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
 	acc, err := NewAccountWithKey(key)
 	if err != nil {
 		log.Errorf("Failed to generate address %s with key %s", address, key.Bytes())
@@ -140,7 +139,11 @@ func (tw *TinyWallet) Unlock(address common.Address, key crypto.PrivKey) error {
 		log.Errorf("address gen by private key is not equal to the target address")
 		return ErrUnlockAcc
 	}
-	tw.accounts = append(tw.accounts, acc)
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if !tw.Contains(acc) {
+		tw.accounts = append(tw.accounts, acc)
+	}
 	tw.unlocked[address] = acc.key
 	return nil
 }
