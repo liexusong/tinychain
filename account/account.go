@@ -132,11 +132,11 @@ func (tw *TinyWallet) CreateAccount() (*Account, error) {
 func (tw *TinyWallet) Unlock(address common.Address, key crypto.PrivKey) error {
 	acc, err := NewAccountWithKey(key)
 	if err != nil {
-		log.Errorf("Failed to generate address %s with key %s", address, key.Bytes())
+		log.Error("Failed to create account")
 		return ErrUnlockAcc
 	}
 	if acc.Address != address {
-		log.Errorf("address gen by private key is not equal to the target address")
+		log.Errorf("Address gen by private key is not equal to the target address")
 		return ErrUnlockAcc
 	}
 	tw.mu.Lock()

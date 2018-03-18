@@ -5,11 +5,44 @@ import (
 	"math/big"
 	"sync/atomic"
 	"encoding/json"
+	"encoding/binary"
+	"encoding/hex"
 )
 
 // BNonce is a 64-bit hash which proves that a sufficient amount of
 // computation has been carried out on a block
 type BNonce [8]byte
+
+func EncodeNonce(i uint64) BNonce {
+	var n BNonce
+	binary.BigEndian.PutUint64(n[:], i)
+	return n
+}
+
+func (n BNonce) Uint64() uint64 {
+	return binary.BigEndian.Uint64(n[:])
+}
+
+func (n BNonce) Hex() []byte {
+	return common.Hex(n[:])
+}
+
+func (n BNonce) DecodeHex(b []byte) error {
+	dec := make([]byte, len(n))
+	_, err := hex.Decode(dec, b[2:])
+	if err != nil {
+		return err
+	}
+	n.SetBytes(dec)
+	return nil
+}
+
+func (n BNonce) SetBytes(b []byte) {
+	if len(b) > len(n) {
+		b = b[:len(n)]
+	}
+	copy(n[:], b)
+}
 
 type Header struct {
 	ParentHash common.Hash    `json:"parent_hash"` // Hash of parent block
@@ -18,8 +51,8 @@ type Header struct {
 	Root       common.Hash    `json:"root"`        // Root of merkle tree
 	Miner      common.Address `json:"miner"`       // Miner address who receives reward of this block
 	Extra      []byte         `json:"extra"`       // Extra data
-	Nonce      BNonce         `json:"nonce"`
-	Time       int64          `json:"time"` // Timestamp
+	Nonce      BNonce         `json:"nonce"`       // Nonce produced by pow
+	Time       int64          `json:"time"`        // Timestamp
 }
 
 func NewHeader(

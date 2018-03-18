@@ -24,13 +24,11 @@ func (h Hash) Bytes() []byte {
 	return h[:]
 }
 
-func (h Hash) Hex() string {
-	enc := make([]byte, len(h)*2+2)
-	copy(enc, "0x")
-	hex.Encode(enc[2:], h[:])
-	return string(enc)
+func (h Hash) Hex() []byte {
+	return Hex(h[:])
 }
 
+// Decode hash string with "0x...." format to Hash type
 func DecodeHash(data []byte) Hash {
 	var h Hash
 	dec := make([]byte, HashLength)
