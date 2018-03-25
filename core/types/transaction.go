@@ -20,9 +20,9 @@ type txData struct {
 	Nonce   uint64         `json:"nonce"` // Account nonce, which is used to avoid double spending
 	Gas     *big.Int       `json:"gas"`   // Gas used
 	Value   *big.Int       `json:"value"` // Transferring value
-	Payload []byte         `json:"payload"`
 	From    common.Address `json:"from"`
-	To      common.Address `json:"to"`
+	To      common.Address `json:"to"` // Recipient of this tx, nil means contract creation
+	Payload []byte         `json:"payload"`
 }
 
 func NewTransaction(nonce uint64, gas, value *big.Int, payload []byte, from, to common.Address) *Transaction {
@@ -30,7 +30,14 @@ func NewTransaction(nonce uint64, gas, value *big.Int, payload []byte, from, to 
 }
 
 func NewTxData(nonce uint64, gas, value *big.Int, payload []byte, from, to common.Address) txData {
-	return txData{nonce, gas, value, payload, from, to}
+	return txData{
+		Nonce:   nonce,
+		Gas:     gas,
+		Value:   value,
+		Payload: payload,
+		From:    from,
+		To:      to,
+	}
 }
 
 func (txd txData) Serialize() ([]byte, error) { return json.Marshal(txd) }

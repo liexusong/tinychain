@@ -10,7 +10,6 @@ import (
 
 var (
 	log              = common.GetLogger("account")
-	ErrGenAddress    = errors.New("failed to generate address")
 	ErrCreateKeyPair = errors.New("failed to create key pair")
 	ErrCreateAcc     = errors.New("failed to create account")
 	ErrUnlockAcc     = errors.New("failed to unlock account in wallet")
@@ -27,9 +26,9 @@ type Account struct {
 // New account by private key
 func NewAccountWithKey(privKey crypto.PrivKey) (*Account, error) {
 	key := &Key{privKey, privKey.GetPublic()}
-	addr, err := GenAddrByPrivkey(privKey)
+	addr, err := common.GenAddrByPrivkey(privKey)
 	if err != nil {
-		return nil, ErrGenAddress
+		return nil, err
 	}
 	return &Account{addr, key}, nil
 }
@@ -40,9 +39,8 @@ func NewAccount() (*Account, error) {
 		log.Errorf(ErrCreateKeyPair.Error())
 		return nil, ErrCreateKeyPair
 	}
-	addr, err := GenAddrByPubkey(key.pubKey)
+	addr, err := common.GenAddrByPubkey(key.pubKey)
 	if err != nil {
-
 		return nil, err
 	}
 	return &Account{addr, key}, nil
@@ -54,27 +52,6 @@ func (ac *Account) PrivKey() crypto.PrivKey {
 
 func (ac *Account) PubKey() crypto.PubKey {
 	return ac.key.pubKey
-}
-
-// Generate address by public key
-func GenAddrByPubkey(key crypto.PubKey) (common.Address, error) {
-	var addr common.Address
-	pubkey, err := key.Bytes()
-	if err != nil {
-		log.Errorf("Failed to decode pubkey to bytes, %s", err)
-		return addr, ErrGenAddress
-	}
-	pubkey = pubkey[1:]
-	h := common.Sha256(pubkey)
-	hash := h[len(h)-common.AddressLength:]
-	addr = common.HashToAddr(common.Sha256(hash))
-	return addr, nil
-}
-
-// Generate address by private key
-func GenAddrByPrivkey(key crypto.PrivKey) (common.Address, error) {
-	pubkey := key.GetPublic()
-	return GenAddrByPubkey(pubkey)
 }
 
 type Wallet interface {
@@ -157,11 +134,10 @@ func (tw *TinyWallet) SignHash(account *Account, hash []byte) ([]byte, error) {
 		log.Error("account has not been unlocked")
 		return nil, ErrNotUnlock
 	}
-	// TODO Sign hash
-
+	return key.priKey.Sign(hash)
 }
 
-func (tw *TinyWallet) SignTx(account *Account, tx *types.Transaction) (*types.Transaction, error) {
+func (tw *TinyWallet) SignTx(account *Account, tx *types.Transaction) ([]byte, error) {
 	if !tw.Contains(account) {
 		return nil, ErrNotFoundAcc
 	}
@@ -169,5 +145,5 @@ func (tw *TinyWallet) SignTx(account *Account, tx *types.Transaction) (*types.Tr
 	if !ok {
 		return nil, ErrNotUnlock
 	}
-	// TODO Sign transaction
+	return tx.Sign(key.priKey)
 }

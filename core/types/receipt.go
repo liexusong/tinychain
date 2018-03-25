@@ -1,7 +1,14 @@
 package types
 
+import "tinychain/common"
+
 type Receipt struct {
 	// Consensus fields
-	PostState []byte `json:"post_state"`
+	PrevState common.Hash    `json:"prev_state"` // prev state root
+	TxHash    common.Hash    `json:"tx_hash"`    // Transaction hash
+	Address   common.Address `json:"address"`    // Contract address
+}
+
+func NewRecipet() *Receipt {
 
 }

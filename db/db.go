@@ -160,7 +160,7 @@ func (tdb *TinyDB) GetBlock(height *big.Int, hash common.Hash) (*types.Block, er
 		return nil, err
 	}
 	block := types.Block{}
-	err = block.Desrialize(data)
+	err = block.Deserialize(data)
 	if err != nil {
 		log.Errorf("Failed to decode block with height %s and hash %s", height, hash)
 		return nil, err

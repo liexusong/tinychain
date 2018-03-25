@@ -48,8 +48,9 @@ type Header struct {
 	ParentHash common.Hash    `json:"parent_hash"` // Hash of parent block
 	Height     *big.Int       `json:"height"`      // Block height
 	Difficulty *big.Int       `json:"difficulty"`  // Difficulty of miner
-	Root       common.Hash    `json:"root"`        // Root of merkle tree
-	Miner      common.Address `json:"miner"`       // Miner address who receives reward of this block
+	StateRoot  common.Hash    `json:"stateRoot"`   // State root
+	TxRoot     common.Hash    `json:"txRoot"`      // Transaction tree root
+	Coinbase   common.Address `json:"miner"`       // Miner address who receives reward of this block
 	Extra      []byte         `json:"extra"`       // Extra data
 	Nonce      BNonce         `json:"nonce"`       // Nonce produced by pow
 	Time       int64          `json:"time"`        // Timestamp
@@ -59,7 +60,8 @@ func NewHeader(
 	parentHash common.Hash,
 	height *big.Int,
 	difficulty *big.Int,
-	root common.Hash,
+	stateRoot common.Hash,
+	txRoot common.Hash,
 	miner common.Address,
 	extra []byte,
 	nonce BNonce,
@@ -69,7 +71,8 @@ func NewHeader(
 		parentHash,
 		height,
 		difficulty,
-		root,
+		stateRoot,
+		txRoot,
 		miner,
 		extra,
 		nonce,
@@ -113,4 +116,4 @@ func (bl *Block) Hash() common.Hash { return bl.hash.Load().(common.Hash) }
 
 func (bl *Block) Serialize() ([]byte, error) { return json.Marshal(bl) }
 
-func (bl *Block) Desrialize(d []byte) error { return json.Unmarshal(d, bl) }
+func (bl *Block) Deserialize(d []byte) error { return json.Unmarshal(d, bl) }
