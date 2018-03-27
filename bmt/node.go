@@ -3,64 +3,99 @@ package bmt
 import (
 	"tinychain/common"
 	"encoding/json"
+	"sync"
 )
 
-type Node interface {
-	Hash() common.Hash // Get hash of this node
-	Serialize() ([]byte, error)
-	Deserialize([]byte) error
+type Position struct {
+	Level int `json:"level"` // the level of the node in tree
+	Index int `json:"index"` // the index of the node in current level
+}
+
+func newPos(level int, index int) *Position {
+	if level < 0 || index < 0 {
+		return nil
+	}
+	return &Position{
+		level,
+		index,
+	}
+}
+
+func (pos *Position) getParent(aggre int) *Position {
+	return newPos(pos.Level-1, pos.Index/aggre)
+}
+
+func (pos *Position) copy() *Position {
+	return newPos(pos.Level, pos.Index)
 }
 
 type MerkleNode struct {
-	hash       []byte
 	db         *BmtDB
-	Children   [][]byte `json:"children"`    // children hash, for locating in db
-	ChildNodes []Node   `json:"child_nodes"` // children node, which can be found and decode from db by hash
-	Leaf       bool     `json:"leaf"`
-	dirty      bool
+	H          common.Hash   `json:"hash"`
+	Pos        *Position     `json:"pos"`      // position of the node
+	Children   []common.Hash `json:"children"` // children hash, for locating in db
+	childNodes []*MerkleNode                   // cache node list
+	leaf       bool                            // Set true if is leaf
+	dirty      []bool
+	lock       sync.RWMutex
 }
 
-func NewMerkleNode(db *BmtDB, children [][]byte, isLeaf bool) *MerkleNode {
+func NewMerkleNode(db *BmtDB, pos *Position, aggre int) *MerkleNode {
 	return &MerkleNode{
-		db:       db,
-		Children: children,
-		Leaf:     isLeaf,
+		db:         db,
+		Pos:        pos,
+		Children:   make([]common.Hash, aggre),
+		childNodes: make([]*MerkleNode, aggre),
+		dirty:      make([]bool, aggre),
 	}
 }
 
 func (node *MerkleNode) Hash() common.Hash {
-	if node.hash == nil {
-		var hash common.Hash
-		return hash.SetBytes(node.hash)
+	return node.H
+}
+
+func (node *MerkleNode) setHash(hash common.Hash) {
+	node.lock.Lock()
+	defer node.lock.Unlock()
+	node.H = hash
+}
+
+// When node is not leaf
+func (node *MerkleNode) computeHash() (common.Hash, error) {
+	node.lock.Lock()
+	defer node.lock.Unlock()
+	if node.leaf {
+		return node.Hash(), nil
 	}
 	var bytes []byte
-	for i, child := range node.Children {
+	for i, childHash := range node.Children {
 		var hash []byte
-		if child == nil {
-			// Node has been read from db
-			if childNode := node.ChildNodes[i]; childNode != nil {
-				hash = childNode.Hash()[:]
-			} else { // Read node data from db
-
+		if node.dirty[i] {
+			child := node.childNodes[i]
+			h, err := child.computeHash()
+			if err != nil {
+				return common.Hash{}, err
 			}
+			node.Children[i] = h
+			hash = h.Bytes()
+			node.dirty[i] = false
 		} else {
-			hash = child
+			hash = childHash.Bytes()
 		}
 		bytes = append(bytes, hash...)
 	}
-	hash := common.Sha256(bytes)
-	node.hash = hash.Bytes()
-	return hash
+	node.H = common.Sha256(bytes)
+	return node.H, nil
 }
 
-func (node *MerkleNode) Serialize() ([]byte, error) {
+func (node *MerkleNode) store() error {
+	return node.db.PutNode(node.Hash(), node)
+}
+
+func (node *MerkleNode) serialize() ([]byte, error) {
 	return json.Marshal(node)
 }
 
-func (node *MerkleNode) Deserialize(b []byte) error {
+func (node *MerkleNode) deserialize(b []byte) error {
 	return json.Unmarshal(b, node)
-}
-
-func (node *MerkleNode) AddChild(child Node) {
-
 }

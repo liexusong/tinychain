@@ -6,7 +6,8 @@ package common
 
 import (
 	"encoding/hex"
-	"golang.org/x/crypto/sha3"
+	"crypto/sha256"
+	"bytes"
 )
 
 const (
@@ -30,25 +31,31 @@ func (h Hash) Hex() []byte {
 
 // Decode hash string with "0x...." format to Hash type
 func DecodeHash(data []byte) Hash {
-	var h Hash
 	dec := make([]byte, HashLength)
 	hex.Decode(dec, data[2:])
-	return h.SetBytes(dec)
+	return BytesToHash(dec)
 }
 
-func (h Hash) SetBytes(d []byte) Hash {
-	if len(d) > len(h) {
+func BytesToHash(d []byte) Hash {
+	var h Hash
+	if len(d) > HashLength {
 		d = d[:HashLength]
 	}
 	copy(h[:], d)
 	return h
 }
 
+func (h Hash) Nil() bool {
+	var ta Hash
+	if bytes.Compare(h.Bytes(), ta.Bytes()) == 0 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func Sha256(d []byte) Hash {
-	var h Hash
-	sha := sha3.New256()
-	h.SetBytes(sha.Sum(d))
-	return h
+	return sha256.Sum256(d)
 }
 
 type Address [AddressLength]byte
@@ -64,12 +71,11 @@ func (addr Address) Bytes() []byte {
 func (addr Address) Hex() string {
 	enc := make([]byte, len(addr)*2)
 	hex.Encode(enc, addr[:])
-	sha := sha3.New256()
-	hash := sha.Sum(enc)
-	return "0x" + string(hash)
+	hash := Sha256(enc)
+	return "0x" + hash.String()
 }
 
-func (addr Address) SetBytes(b []byte) Address {
+func (addr Address) BytesToHash(b []byte) Address {
 	if len(b) > len(addr) {
 		b = b[:AddressLength]
 	}
@@ -79,7 +85,7 @@ func (addr Address) SetBytes(b []byte) Address {
 
 func HashToAddr(hash Hash) Address {
 	var addr Address
-	addr.SetBytes(hash[:AddressLength])
+	addr.BytesToHash(hash[:AddressLength])
 	return addr
 }
 
@@ -87,5 +93,5 @@ func DecodeAddr(d []byte) Address {
 	var addr Address
 	dec := make([]byte, AddressLength)
 	hex.Decode(dec, d[2:])
-	return addr.SetBytes(dec)
+	return addr.BytesToHash(dec)
 }

@@ -5,75 +5,175 @@ import (
 	"encoding/binary"
 	"sync"
 	"encoding/json"
+	"bytes"
+	"github.com/pkg/errors"
+	"sort"
 )
 
 type Bucket struct {
-	hash  []byte
-	slots map[common.Hash][]byte
+	lock  sync.RWMutex
+	H     common.Hash       `json:"hash"`
+	Slots map[string][]byte `json:"slots"`
+	Keys  []string          `json:"keys"` // store the order of map key
 }
 
 func NewBucket() *Bucket {
 	return &Bucket{
-		slots: make(map[common.Hash][]byte),
+		Slots: make(map[string][]byte),
 	}
 }
 
 func (bk *Bucket) Hash() common.Hash {
-	if bk.hash != nil {
-		var hash common.Hash
-		return hash.SetBytes(bk.hash)
-	}
-	var bytes []byte
-	for _, v := range bk.slots {
-		bytes = append(bytes, v...)
-	}
-	hash := common.Sha256(bytes)
-	bk.hash = hash.Bytes()
-	return hash
+	return bk.H
 }
 
-func (bk *Bucket) Serialize() ([]byte, error) {
+// Compute hash
+func (bk *Bucket) computHash() common.Hash {
+	bk.lock.Lock()
+	defer bk.lock.Unlock()
+	var bytes []byte
+	// Sort the keys array in increasing order
+	if !sort.StringsAreSorted(bk.Keys) {
+		sort.Strings(bk.Keys)
+	}
+	for _, key := range bk.Keys {
+		bytes = append(bytes, bk.Slots[key]...)
+	}
+	bk.H = common.Sha256(bytes)
+	return bk.H
+}
+
+// Check key is existed or not
+func (bk *Bucket) hasKey(key string) bool {
+	for _, v := range bk.Keys {
+		if v == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (bk *Bucket) addKey(key string) {
+	if bk.hasKey(key) {
+		return
+	}
+	bk.lock.Lock()
+	defer bk.lock.Unlock()
+	bk.Keys = append(bk.Keys, key)
+}
+
+func (bk *Bucket) serialize() ([]byte, error) {
 	return json.Marshal(bk)
 }
 
-func (bk *Bucket) Deserialize(d []byte) error {
+func (bk *Bucket) deserialize(d []byte) error {
 	return json.Unmarshal(d, bk)
 }
 
+// Wrapper of buckets
 type HashTable struct {
-	cap     int
-	buckets []*Bucket
-	dirty   []bool
-	lock    sync.RWMutex
+	db         *BmtDB
+	Cap        int           `json:"cap"`
+	BucketHash []common.Hash `json:"bucket_hash"`
+	buckets    []*Bucket
+	dirty      []bool
+	lock       sync.RWMutex
 }
 
-func NewHashTable(cap int) *HashTable {
-	var buckets [cap]*Bucket
-	for i := range buckets {
-		buckets[i] = NewBucket()
-	}
+func NewHashTable(db *BmtDB, cap int) *HashTable {
 	return &HashTable{
-		cap:     cap,
-		buckets: buckets[:],
-		dirty:   make([]bool, cap, cap),
+		db:         db,
+		Cap:        cap,
+		buckets:    make([]*Bucket, cap, cap),
+		BucketHash: make([]common.Hash, cap, cap),
+		dirty:      make([]bool, cap, cap),
 	}
 }
 
-func (ht *HashTable) getIndex(key common.Hash) uint32 {
-	val := binary.BigEndian.Uint32(key.Bytes())
-	return val % uint32(ht.cap)
+func (ht *HashTable) serialize() ([]byte, error) {
+	return json.Marshal(ht)
 }
 
-func (ht *HashTable) add(key common.Hash, value []byte) {
+func (ht *HashTable) deserialize(d []byte) error {
+	return json.Unmarshal(d, ht)
+}
+
+func (ht *HashTable) getIndex(key string) uint32 {
+	val := binary.BigEndian.Uint32([]byte(key))
+	return val % uint32(ht.Cap)
+}
+
+func (ht *HashTable) put(key string, value []byte) error {
+	var (
+		err    error
+		bucket *Bucket
+	)
 	ht.lock.Lock()
 	defer ht.lock.Unlock()
 	index := ht.getIndex(key)
-	ht.buckets[index].slots[key] = value
-	ht.dirty[index] = true
+	bucket = ht.buckets[index]
+	if bucket == nil {
+		if hash := ht.BucketHash[index]; !hash.Nil() {
+			bucket, err = ht.db.GetBucket(hash)
+			if err != nil {
+				return err
+			}
+			ht.buckets[index] = bucket
+		} else {
+			bucket = NewBucket()
+			ht.buckets[index] = bucket
+		}
+	}
+	oldVal := bucket.Slots[key]
+	if bytes.Compare(oldVal, value) != 0 {
+		bucket.addKey(key)
+		bucket.Slots[key] = value
+		ht.dirty[index] = true
+	}
+	return nil
 }
 
-func (ht *HashTable) get(key common.Hash) []byte {
+func (ht *HashTable) get(key string) ([]byte, error) {
+	var (
+		err    error
+		bucket *Bucket
+	)
 	ht.lock.RLock()
 	defer ht.lock.RUnlock()
-	return ht.buckets[ht.getIndex(key)].slots[key]
+	index := ht.getIndex(key)
+	bucket = ht.buckets[index]
+	if bucket == nil {
+		if hash := ht.BucketHash[index]; !hash.Nil() {
+			// Get bucket from db by bucket_hash
+			bucket, err = ht.db.GetBucket(ht.BucketHash[index])
+			if err != nil {
+				return nil, err
+			}
+			ht.buckets[index] = bucket
+		} else {
+			return nil, errors.New("value not found")
+		}
+	}
+	return bucket.Slots[key], nil
+}
+
+func (ht *HashTable) store() error {
+	ht.lock.Lock()
+	defer ht.lock.Unlock()
+	for i, dirty := range ht.dirty {
+		if dirty {
+			bucket := ht.buckets[i]
+			err := ht.db.PutBucket(bucket.Hash(), bucket)
+			if err != nil {
+				return err
+			}
+		}
+		ht.dirty[i] = false
+	}
+	for i, bucket := range ht.buckets {
+		if bucket != nil {
+			ht.BucketHash[i] = bucket.Hash()
+		}
+	}
+	return nil
 }
