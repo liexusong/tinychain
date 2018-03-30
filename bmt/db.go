@@ -28,6 +28,7 @@ func (bdb *BmtDB) GetNode(key common.Hash) (*MerkleNode, error) {
 	}
 	node := &MerkleNode{db: bdb}
 	node.deserialize(data)
+	node.childNodes = make([]*MerkleNode, len(node.Children))
 	return node, nil
 }
 

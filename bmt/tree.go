@@ -26,8 +26,8 @@ func NewWriteSet() WriteSet {
 
 type BucketTree struct {
 	db         *BmtDB
-	capacity   int
-	aggreation int
+	Capacity   int
+	Aggreation int
 	llevel     int        // the loweset level of tree
 	node       sync.Map   // map[Position]*MerkleNode
 	hashTable  *HashTable // dirty data hash table
@@ -37,8 +37,8 @@ type BucketTree struct {
 func NewBucketTree(db *leveldb.LDBDatabase) *BucketTree {
 	// v1.0
 	return &BucketTree{
-		capacity:   defaultHashTableCap,
-		aggreation: defaultAggreation,
+		Capacity:   defaultHashTableCap,
+		Aggreation: defaultAggreation,
 		db:         NewBmtDB(db),
 	}
 }
@@ -66,22 +66,24 @@ func (bt *BucketTree) LowestLevel() int {
 
 // Init constructing the tree structure
 func (bt *BucketTree) Init(rootHash []byte) error {
-	var root *MerkleNode
+	var (
+		root *MerkleNode
+		err  error
+	)
 	if rootHash == nil {
 		// Create a new root node
-		root = NewMerkleNode(bt.db, newPos(0, 0), bt.aggreation)
+		root = NewMerkleNode(bt.db, newPos(0, 0), bt.Aggreation)
 
 		// Create a new hash table
-		bt.hashTable = NewHashTable(bt.db, bt.capacity)
+		bt.hashTable = NewHashTable(bt.db, bt.Capacity)
 	} else {
 		rhash := common.BytesToHash(rootHash)
 		// Read an existed bucket_tree from db
-		root, err := bt.db.GetNode(rhash)
+		root, err = bt.db.GetNode(rhash)
 		if err != nil {
 			log.Errorf("Failed to get root node:%s", err)
 			return err
 		}
-		bt.putNode(newPos(0, 0), root)
 		bt.hashTable, err = bt.db.GetHashTable(rhash)
 		if err != nil {
 			log.Errorf("Failed to get hash table from db:%s", err)
@@ -98,8 +100,8 @@ func (bt *BucketTree) walkCreateNode(curr *MerkleNode, level int) *MerkleNode {
 	// Put node to global map of tree
 	bt.putNode(curr.Pos, curr)
 
-	num := pow(bt.aggreation, level)
-	if num >= bt.capacity {
+	num := pow(bt.Aggreation, level)
+	if num >= bt.Capacity {
 		// leaf node
 		if bt.llevel == 0 {
 			bt.llevel = level
@@ -107,16 +109,16 @@ func (bt *BucketTree) walkCreateNode(curr *MerkleNode, level int) *MerkleNode {
 		curr.leaf = true
 	} else {
 		var err error
-		for i := 0; i < bt.aggreation; i++ {
-			ind := curr.Pos.Index*bt.aggreation + i
+		for i := 0; i < bt.Aggreation; i++ {
+			ind := curr.Pos.Index*bt.Aggreation + i
 			if hash := curr.Children[i]; !hash.Nil() {
 				curr.childNodes[i], err = bt.db.GetNode(hash)
 				if err != nil {
 					log.Errorf("cannot find node by hash, fatal error")
-					curr.childNodes[i] = NewMerkleNode(bt.db, newPos(level+1, ind), bt.aggreation)
+					curr.childNodes[i] = NewMerkleNode(bt.db, newPos(level+1, ind), bt.Aggreation)
 				}
 			} else {
-				curr.childNodes[i] = NewMerkleNode(bt.db, newPos(level+1, ind), bt.aggreation)
+				curr.childNodes[i] = NewMerkleNode(bt.db, newPos(level+1, ind), bt.Aggreation)
 			}
 			bt.walkCreateNode(curr.childNodes[i], level+1)
 		}
@@ -170,15 +172,15 @@ func (bt *BucketTree) processNodes() error {
 		// Collect dirty node
 		pos := lowestPos.copy()
 		for pos.Level > 0 {
-			parentPos := pos.getParent(bt.aggreation)
+			parentPos := pos.getParent(bt.Aggreation)
 			parent, err := bt.getNode(parentPos)
 			if err != nil {
 				log.Errorf("Stop processing parent node: %s", err)
 				return err
 			}
-			parent.dirty[i%bt.aggreation] = true
+			parent.dirty[i%bt.Aggreation] = true
 			pos = parentPos
-			i /= bt.aggreation
+			i /= bt.Aggreation
 		}
 	}
 	return nil
@@ -219,13 +221,14 @@ func (bt *BucketTree) commitNode(node *MerkleNode) error {
 	if node == nil {
 		return nil
 	}
-	go node.store()
+	node.store()
 	for i, child := range node.childNodes {
 		if node.dirty[i] {
 			err := bt.commitNode(child)
 			if err != nil {
 				return err
 			}
+			node.dirty[i] = false
 		}
 	}
 	return nil
@@ -233,6 +236,7 @@ func (bt *BucketTree) commitNode(node *MerkleNode) error {
 
 func (bt *BucketTree) Verify(data []byte) {
 	// TODO verify data
+
 }
 
 func pow(a, m int) int {

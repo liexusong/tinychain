@@ -78,7 +78,6 @@ func (node *MerkleNode) computeHash() (common.Hash, error) {
 			}
 			node.Children[i] = h
 			hash = h.Bytes()
-			node.dirty[i] = false
 		} else {
 			hash = childHash.Bytes()
 		}
