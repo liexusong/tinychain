@@ -8,8 +8,8 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	pa "path/filepath"
-	"HyperDCDN/common"
-	"HyperDCDN/db"
+	"github.com/hyperchain/hyperchain/common"
+	"github.com/hyperchain/hyperchain/hyperdb/db"
 )
 
 var log *logging.Logger // package-level logger
@@ -57,7 +57,7 @@ func (self *LDBDatabase) Put(key []byte, value []byte) error {
 // the Database does not contains the key
 func (self *LDBDatabase) Get(key []byte) ([]byte, error) {
 	dat, err := self.db.Get(key, nil)
-	if err != nil && err.Error() == db.LEVEL_DB_NOT_FOUND {
+	if err != nil {
 		err = db.DB_NOT_FOUND
 	}
 	return dat, err
@@ -136,6 +136,10 @@ func (b *ldbBatch) Delete(key []byte) error {
 // Write write batch-operation to database
 func (b *ldbBatch) Write() error {
 	return b.db.Write(b.b, nil)
+}
+
+func (b *ldbBatch) WriteTo(i interface{}) error {
+	return nil
 }
 
 func (b *ldbBatch) Len() int {

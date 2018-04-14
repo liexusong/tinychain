@@ -3,10 +3,11 @@ package account
 import (
 	"github.com/libp2p/go-libp2p-crypto"
 	"crypto/rand"
+	"tinychain/common"
 )
 
 type Key struct {
-	priKey crypto.PrivKey
+	privKey crypto.PrivKey
 	pubKey crypto.PubKey
 }
 
@@ -16,4 +17,12 @@ func NewKeyPairs() (*Key, error) {
 		return nil, err
 	}
 	return &Key{priv, pub}, nil
+}
+
+func validatePrivKey(address common.Address, priv crypto.PrivKey) bool {
+	addr, err := common.GenAddrByPrivkey(priv)
+	if err != nil {
+		return false
+	}
+	return addr == address
 }

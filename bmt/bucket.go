@@ -6,7 +6,7 @@ import (
 	"sync"
 	"encoding/json"
 	"bytes"
-	"github.com/pkg/errors"
+	"errors"
 	"sort"
 )
 

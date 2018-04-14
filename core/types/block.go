@@ -95,12 +95,12 @@ type Block struct {
 	Header       *Header        `json:"header"`
 	Transactions []*Transaction `json:"transactions"`
 
-	hash atomic.Value // Header hash
+	Hash atomic.Value `json:"hash"` // Header hash
 
 	// Total difficulty, to avoid hard fork
 	// Tiny will accept the block  with the largest difficulty
 	// and link it to the main chain
-	TD *big.Int
+	TD *big.Int `json:"td"`
 }
 
 func NewBlock(header *Header, txs []*Transaction, td *big.Int) *Block {
@@ -108,11 +108,19 @@ func NewBlock(header *Header, txs []*Transaction, td *big.Int) *Block {
 		Header:       header,
 		Transactions: txs,
 	}
-	block.hash.Store(header.Hash())
+	block.Hash.Store(header.Hash())
 	return block
 }
 
-func (bl *Block) Hash() common.Hash { return bl.hash.Load().(common.Hash) }
+// Calculate hash of block
+// Combine header hash and transactions hash, and sha256 it
+func (bl *Block) SetHash() common.Hash {
+	hash := bl.Header.Hash()[:]
+	for _, tx := range bl.Transactions {
+		hash = append(hash, tx.Hash()[:]...)
+	}
+	return common.Sha256(hash)
+}
 
 func (bl *Block) Serialize() ([]byte, error) { return json.Marshal(bl) }
 

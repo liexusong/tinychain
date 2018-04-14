@@ -13,12 +13,13 @@ import (
 
 	"LastHeader" => the latest block header
 	"LastBlock" => the latest block
+
 	"h" + height + "n" => hash   block height => block header hash
 	"h" + height + hash => header
 	"h" + height + hash + "t" => total difficulty
 	"H" + hash => height   block hash => height
-	"b" + num + hash => block body
-	"r" + num + hash => block receipts
+	"b" + height + hash => block body
+	"r" + height + hash => block receipts
 	"l" + hash => transaction
 */
 
@@ -46,22 +47,47 @@ func NewTinyDB() (*TinyDB, error) {
 	return &TinyDB{db}, nil
 }
 
-func (tdb *TinyDB) GetLastHeader(height *big.Int) (*types.Header, error) {
-	data, err := tdb.db.Get([]byte(KeyLastHeader))
+func (tdb *TinyDB) GetLastBlock() (*types.Block, error) {
+	data, err := tdb.db.Get([]byte(KeyLastBlock))
 	if err != nil {
-		log.Error("Cannot find last header")
+		log.Errorf("Cannot find last block, %s", err)
 		return nil, err
 	}
-	header := types.Header{}
+	block := &types.Block{}
+	err = block.Deserialize(data)
+	if err != nil {
+		log.Errorf("Failed to decode block, %s", err)
+		return nil, err
+	}
+	return block, nil
+}
+
+func (tdb *TinyDB) PutLastBlock(block *types.Block) error {
+	data, _ := block.Serialize()
+	err := tdb.db.Put([]byte(KeyLastBlock), data)
+	if err != nil {
+		log.Errorf("Failed to put block, %s", block)
+		return err
+	}
+	return nil
+}
+
+func (tdb *TinyDB) GetLastHeader() (*types.Header, error) {
+	data, err := tdb.db.Get([]byte(KeyLastHeader))
+	if err != nil {
+		log.Errorf("Cannot find last header, %s", err)
+		return nil, err
+	}
+	header := &types.Header{}
 	err = header.Desrialize(data)
 	if err != nil {
 		log.Errorf("Failed to decode header, %s", err)
 		return nil, err
 	}
-	return &header, nil
+	return header, nil
 }
 
-func (tdb *TinyDB) PutLastHeader(height *big.Int, header types.Header) error {
+func (tdb *TinyDB) PutLastHeader(header *types.Header) error {
 	data, _ := header.Serialize()
 	err := tdb.db.Put([]byte(KeyLastHeader), data)
 	if err != nil {

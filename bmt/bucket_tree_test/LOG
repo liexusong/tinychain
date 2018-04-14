@@ -2829,3 +2829,13 @@
 11:15:51.356859 table@remove removed @705
 11:15:51.357106 table@remove removed @704
 11:15:51.357273 db@write was delayed N·9 T·14.040377ms
+=============== Apr 14, 2018 (CST) ===============
+14:00:58.408923 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+14:00:58.409925 version@stat F·[0 1] S·172KiB[0B 172KiB] Sc·[0.00 0.00]
+14:00:58.409925 db@open opening
+14:00:58.409925 journal@recovery F·1
+14:00:58.409925 journal@recovery recovering @727
+14:00:58.432969 memdb@flush created L0@730 N·15 S·2KiB "n\x01\xef..\x04\x05\x84,v2648":"tB\xaa..\xabp\xff,v2655"
+14:00:58.434963 version@stat F·[1 1] S·174KiB[2KiB 172KiB] Sc·[0.25 0.00]
+14:00:58.465008 db@janitor F·4 G·0
+14:00:58.465008 db@open done T·55.0828ms
