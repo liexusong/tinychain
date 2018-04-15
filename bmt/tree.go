@@ -234,9 +234,20 @@ func (bt *BucketTree) commitNode(node *MerkleNode) error {
 	return nil
 }
 
+func (bt *BucketTree) Copy() *BucketTree {
+	newTree := *bt
+	newTree.hashTable = bt.hashTable.copy()
+	return &newTree
+}
+
 func (bt *BucketTree) Verify(data []byte) {
 	// TODO verify data
 
+}
+
+// Get data from hash table by key
+func (bt *BucketTree) Get(key []byte) ([]byte, error) {
+	return bt.hashTable.get(string(key))
 }
 
 func pow(a, m int) int {

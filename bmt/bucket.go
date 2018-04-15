@@ -90,6 +90,17 @@ func NewHashTable(db *BmtDB, cap int) *HashTable {
 	}
 }
 
+func (ht *HashTable) copy() *HashTable {
+	var newBuckets []*Bucket
+	newHT := *ht
+	for _, bucket := range ht.buckets {
+		nb := *bucket
+		newBuckets = append(newBuckets, &nb)
+	}
+	newHT.buckets = newBuckets
+	return &newHT
+}
+
 func (ht *HashTable) serialize() ([]byte, error) {
 	return json.Marshal(ht)
 }

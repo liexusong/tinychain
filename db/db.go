@@ -13,6 +13,7 @@ import (
 
 	"LastHeader" => the latest block header
 	"LastBlock" => the latest block
+	"WorldState" => the latest world state root hash
 
 	"h" + height + "n" => hash   block height => block header hash
 	"h" + height + hash => header
@@ -26,6 +27,7 @@ import (
 const (
 	KeyLastHeader = "LastHeader"
 	KeyLastBlock  = "LastBlock"
+	KeyWorldState = "WorldState"
 )
 
 var (
@@ -45,6 +47,14 @@ func NewTinyDB() (*TinyDB, error) {
 	}
 
 	return &TinyDB{db}, nil
+}
+
+func (tdb *TinyDB) GetWorldState() (common.Hash, error) {
+	data, err := tdb.db.Get([]byte(KeyWorldState))
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return common.BytesToHash(data), nil
 }
 
 func (tdb *TinyDB) GetLastBlock() (*types.Block, error) {

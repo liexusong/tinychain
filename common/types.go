@@ -95,3 +95,4 @@ func DecodeAddr(d []byte) Address {
 	hex.Decode(dec, d[2:])
 	return addr.BytesToHash(dec)
 }
+
