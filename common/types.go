@@ -7,7 +7,6 @@ package common
 import (
 	"encoding/hex"
 	"crypto/sha256"
-	"bytes"
 )
 
 const (
@@ -46,12 +45,7 @@ func BytesToHash(d []byte) Hash {
 }
 
 func (h Hash) Nil() bool {
-	var ta Hash
-	if bytes.Compare(h.Bytes(), ta.Bytes()) == 0 {
-		return true
-	} else {
-		return false
-	}
+	return h == Hash{}
 }
 
 func Sha256(d []byte) Hash {
@@ -95,4 +89,3 @@ func DecodeAddr(d []byte) Address {
 	hex.Decode(dec, d[2:])
 	return addr.BytesToHash(dec)
 }
-

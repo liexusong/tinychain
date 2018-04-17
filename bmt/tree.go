@@ -21,7 +21,7 @@ const (
 type WriteSet map[string][]byte
 
 func NewWriteSet() WriteSet {
-	return make(map[string][]byte)
+	return make(WriteSet)
 }
 
 type BucketTree struct {

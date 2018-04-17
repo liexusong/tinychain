@@ -51,18 +51,3 @@ func (db *cacheDB) PutCode(codeHash common.Hash, code []byte) error {
 	return nil
 }
 
-// Put code in batch to db
-func (db *cacheDB) PutCodeInBatch(writeSet map[common.Hash]*stateObject) error {
-	batch := db.db.NewBatch()
-	for hash, obj := range writeSet {
-		key := append([]byte(KeyContractCode), hash.Bytes()...)
-		batch.Put(key, obj.Code())
-	}
-	if err := batch.Write(); err != nil {
-		return err
-	}
-	for _, obj := range writeSet {
-		obj.dirtyCode = false
-	}
-	return nil
-}

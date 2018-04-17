@@ -8,13 +8,17 @@ import (
 	"tinychain/bmt"
 )
 
-type Storage map[common.Hash][]byte
+// Value is not actually hash, but just a 32 bytes array
+type Storage map[common.Hash]common.Hash
 
 type stateObject struct {
 	address common.Address
 	data    *Account
 	code    []byte     // contract code bytes
 	bmt     BucketTree // bucket tree of this account
+
+	cacheStorage Storage // storage cache
+	dirtyStorage Storage // dirty storage
 
 	dirtyCode bool // code is updated or not
 }
@@ -34,11 +38,12 @@ func (s *Account) Deserialize(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
-func newStateObject(address common.Address, data *Account, code []byte) *stateObject {
+func newStateObject(address common.Address, data *Account) *stateObject {
 	return &stateObject{
-		address: address,
-		data:    data,
-		code:    code,
+		address:      address,
+		data:         data,
+		cacheStorage: make(Storage),
+		dirtyStorage: make(Storage),
 	}
 }
 
@@ -88,10 +93,49 @@ func (s *stateObject) SetNonce(nonce uint64) {
 	s.data.Nonce = nonce
 }
 
-func (s *stateObject) getBmt(db *leveldb.LDBDatabase) BucketTree {
+func (s *stateObject) Bmt(db *leveldb.LDBDatabase) BucketTree {
+	if tree := s.bmt; tree != nil {
+		return tree
+	}
 	tree := bmt.NewBucketTree(db)
 	tree.Init(s.data.Root.Bytes())
+	s.bmt = tree
 	return tree
+}
+
+func (s *stateObject) GetState(key common.Hash) common.Hash {
+	if val, exist := s.cacheStorage[key]; exist {
+		return val
+	}
+	// Load slot from bucket merkel tree
+	val, err := s.bmt.Get(key.Bytes())
+	if err != nil {
+		return common.Hash{}
+	}
+	slot := common.BytesToHash(val)
+	s.SetState(key, slot)
+	return slot
+
+}
+
+func (s *stateObject) SetState(key, value common.Hash) {
+	s.cacheStorage[key] = value
+	s.dirtyStorage[key] = value
+}
+
+func (s *stateObject) updateRoot() (common.Hash, error) {
+	dirtySet := bmt.NewWriteSet()
+	for key, value := range s.dirtyStorage {
+		delete(s.dirtyStorage, key)
+		dirtySet[key.String()] = value.Bytes()
+		// TODO if value.Nil() ?
+	}
+
+	if err := s.bmt.Prepare(dirtySet); err != nil {
+		return common.Hash{}, err
+	}
+
+	return s.bmt.Process()
 }
 
 func (s *stateObject) Commit() error {
@@ -101,4 +145,15 @@ func (s *stateObject) Commit() error {
 	}
 	s.data.Root = s.bmt.Hash()
 	return nil
+}
+
+func (s *stateObject) deepCopy() *stateObject {
+	newAcc := *s.data
+	sobj := newStateObject(s.address, &newAcc)
+	sobj.code = s.code
+	sobj.dirtyCode = s.dirtyCode
+	if tree := s.bmt; tree != nil {
+		sobj.bmt = tree.Copy()
+	}
+	return s
 }

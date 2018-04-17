@@ -45,26 +45,27 @@ func New(db *leveldb.LDBDatabase, root common.Hash) *StateDB {
 }
 
 // Get state object from cache and bucket tree
-// If not found, return nil
-func (sdb *StateDB) GetStateObj(addr common.Address) (*stateObject, error) {
+// If error, return nil
+func (sdb *StateDB) GetStateObj(addr common.Address) *stateObject {
 	if stateObj, exist := sdb.stateObjects[addr]; exist {
-		return stateObj, nil
+		return stateObj
 	}
-
 	data, err := sdb.bmt.Get(addr.Bytes())
 	if err != nil {
-		log.Errorf("State object not found, %s", err)
-		return nil, err
+		return nil
 	}
 	account := &Account{}
 	err = account.Deserialize(data)
 	if err != nil {
-		return nil, err
+		return nil
 	}
+	stateObj := newStateObject(addr, account)
 	code, _ := sdb.db.GetCode(account.CodeHash)
-	stateObj := newStateObject(addr, account, code)
+	if code != nil {
+		stateObj.SetCode(code)
+	}
 	sdb.setStateObj(stateObj)
-	return stateObj, nil
+	return stateObj
 }
 
 // Create a new state object
@@ -73,7 +74,7 @@ func (sdb *StateDB) CreateStateObj(addr common.Address) *stateObject {
 		Nonce:   uint64(0),
 		Balance: new(big.Int),
 	}
-	newObj := newStateObject(addr, account, nil)
+	newObj := newStateObject(addr, account)
 	sdb.setStateObj(newObj)
 	return newObj
 }
@@ -84,13 +85,92 @@ func (sdb *StateDB) setStateObj(object *stateObject) {
 	sdb.stateObjectsDirty[object.Address()] = struct{}{}
 }
 
+// Get state of an account with address
+func (sdb *StateDB) GetState(addr common.Address, key common.Hash) common.Hash {
+	stateObj := sdb.GetStateObj(addr)
+	if stateObj != nil {
+		return stateObj.GetState(key)
+	}
+	return common.Hash{}
+}
+
+// Set state of an account
+func (sdb *StateDB) SetState(addr common.Address, key, value common.Hash) {
+	stateObj := sdb.GetOrNewStateObj(addr)
+	if stateObj != nil {
+		stateObj.SetState(key, value)
+	}
+}
+
+func (sdb *StateDB) GetCodeHash(addr common.Address) common.Hash {
+	stateObj := sdb.GetStateObj(addr)
+	if stateObj != nil {
+		return stateObj.CodeHash()
+	}
+	return common.Hash{}
+}
+
+// Get state bucket merkel tree of state object
+func (sdb *StateDB) StateBmt(addr common.Address) BucketTree {
+	stateObj := sdb.GetStateObj(addr)
+	if stateObj != nil {
+		return stateObj.bmt.Copy()
+	}
+	return nil
+}
+
+// Get or create a state object
+func (sdb *StateDB) GetOrNewStateObj(addr common.Address) *stateObject {
+	stateObj := sdb.GetStateObj(addr)
+	if stateObj != nil {
+		return sdb.CreateStateObj(addr)
+	}
+	return stateObj
+}
+
+
+func (sdb *StateDB) SetBalance(addr common.Address, amount *big.Int) {
+	stateObj := sdb.GetOrNewStateObj(addr)
+	if stateObj != nil {
+		stateObj.SetBalance(amount)
+	}
+}
+
+func (sdb *StateDB) AddBalance(addr common.Address, amount *big.Int) {
+	stateObj := sdb.GetOrNewStateObj(addr)
+	if stateObj != nil {
+		stateObj.AddBalance(amount)
+	}
+}
+
+func (sdb *StateDB) SubBalance(addr common.Address, amount *big.Int) {
+	stateObj := sdb.GetOrNewStateObj(addr)
+	if stateObj != nil {
+		stateObj.SubBalance(amount)
+	}
+}
+
+func (sdb *StateDB) SetNonce(addr common.Address, nonce uint64) {
+	stateObj := sdb.GetOrNewStateObj(addr)
+	if stateObj != nil {
+		stateObj.SetNonce(nonce)
+	}
+}
+
+func (sdb *StateDB) SetCode(addr common.Address, code []byte) {
+	stateObj := sdb.GetOrNewStateObj(addr)
+	if stateObj != nil {
+		stateObj.SetCode(code)
+	}
+}
+
 // Process dirty state object to state tree and get intermediate root
 func (sdb *StateDB) IntermediateRoot() (common.Hash, error) {
 	dirtySet := bmt.NewWriteSet()
 	for addr := range sdb.stateObjectsDirty {
 		stateobj := sdb.stateObjects[addr]
 		data, _ := stateobj.data.Serialize()
-		dirtySet[string(addr.Bytes())] = data
+		dirtySet[addr.String()] = data
 	}
 	if err := sdb.bmt.Prepare(dirtySet); err != nil {
 		return common.Hash{}, err
@@ -100,20 +180,19 @@ func (sdb *StateDB) IntermediateRoot() (common.Hash, error) {
 
 func (sdb *StateDB) Commit() error {
 	dirtySet := bmt.NewWriteSet()
-	codeSet := make(map[common.Hash]*stateObject)
 
 	for addr := range sdb.stateObjectsDirty {
 		delete(sdb.stateObjectsDirty, addr)
 		stateobj := sdb.stateObjects[addr]
 		// Put account data to dirtySet
 		data, _ := stateobj.data.Serialize()
-		dirtySet[string(addr.Bytes())] = data
+		dirtySet[addr.String()] = data
 
 		// Put code bytes to codeSet
 		if stateobj.dirtyCode {
-			// Put stateobj as value, because we need to set `dirtyCode` to false
-			// after write in batch
-			codeSet[stateobj.CodeHash()] = stateobj
+			if err := sdb.db.PutCode(stateobj.CodeHash(), stateobj.Code()); err != nil {
+				stateobj.dirtyCode = false
+			}
 		}
 	}
 
@@ -121,9 +200,6 @@ func (sdb *StateDB) Commit() error {
 		return err
 	}
 	if err := sdb.bmt.Commit(); err != nil {
-		return err
-	}
-	if err := sdb.db.PutCodeInBatch(codeSet); err != nil {
 		return err
 	}
 	return nil
