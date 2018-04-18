@@ -5,14 +5,13 @@ import (
 	"math/big"
 	"tinychain/core/vm"
 	"errors"
-	"github.com/op/go-logging"
 )
 
 var (
 	ErrNonceTooHight = errors.New("nonce too hight")
 	ErrNonceTooLow   = errors.New("nonce too low")
-	MaxGas           = uint64(9999999)
-	RewardPerTx      = uint64(100)
+	MaxGas           = uint64(9999999) // Maximum
+	RewardPerTx      = uint64(100)     // Reward token per tx for miner
 )
 
 // An event sent to a contract, which will make state transition
@@ -29,7 +28,6 @@ type StateTransition struct {
 	event   Event // state transition event
 	evm     *vm.EVM
 	statedb vm.StateDB
-	log     *logging.Logger
 }
 
 func NewStateTransition(evm *vm.EVM, event Event) *StateTransition {
@@ -37,8 +35,11 @@ func NewStateTransition(evm *vm.EVM, event Event) *StateTransition {
 		evm:     evm,
 		event:   event,
 		statedb: evm.StateDB,
-		log:     common.GetLogger("state"),
 	}
+}
+
+func ApplyEvent(evm *vm.EVM, event Event) ([]byte, error) {
+	return NewStateTransition(evm, event).Process()
 }
 
 func (st *StateTransition) value() *big.Int {
@@ -61,11 +62,27 @@ func (st *StateTransition) preCheck() error {
 	return nil
 }
 
-func (st *StateTransition) to() common.Address {
-	if st.event == nil {
-		return common.Address{}
+func (st *StateTransition) from() vm.AccountRef {
+	addr := st.event.From()
+	if !st.statedb.Exist(addr) {
+		st.statedb.CreateAccount(addr)
 	}
-	return st.event.To()
+	return vm.AccountRef(addr)
+}
+
+func (st *StateTransition) to() vm.AccountRef {
+	if st.event == nil {
+		return vm.AccountRef{}
+	}
+
+	if (st.event.To() == common.Address{}) {
+		return vm.AccountRef{}
+	}
+	to := st.event.To()
+	if !st.statedb.Exist(to) {
+		st.statedb.CreateAccount(to)
+	}
+	return vm.AccountRef(to)
 }
 
 // Make state transition according to transaction event
@@ -79,11 +96,12 @@ func (st *StateTransition) Process() ([]byte, error) {
 		vmerr error
 		ret   []byte
 	)
-	if (st.to() == common.Address{}) {
+	if (st.to() == vm.AccountRef{}) {
 		// Contract create
-		ret, _, _, vmerr = st.evm.Create(vm.AccountRef(st.to()), st.data(), MaxGas, st.value())
+		ret, _, _, vmerr = st.evm.Create(st.to(), st.data(), MaxGas, st.value())
 	} else {
-		ret, _, vmerr = st.evm.Call(vm.AccountRef(st.event.From()), st.to(), st.data(), MaxGas, st.value())
+		// Call contract
+		ret, _, vmerr = st.evm.Call(st.from(), st.to().Address(), st.data(), MaxGas, st.value())
 	}
 	if vmerr != nil {
 		log.Errorf("VM returned with error %s", vmerr)

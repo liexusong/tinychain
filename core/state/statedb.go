@@ -128,7 +128,6 @@ func (sdb *StateDB) GetOrNewStateObj(addr common.Address) *stateObject {
 	return stateObj
 }
 
-
 func (sdb *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 	stateObj := sdb.GetOrNewStateObj(addr)
 	if stateObj != nil {
@@ -162,6 +161,11 @@ func (sdb *StateDB) SetCode(addr common.Address, code []byte) {
 	if stateObj != nil {
 		stateObj.SetCode(code)
 	}
+}
+
+func (sdb *StateDB) Exist(addr common.Address) bool {
+	s := sdb.GetStateObj(addr)
+	return s != nil
 }
 
 // Process dirty state object to state tree and get intermediate root
