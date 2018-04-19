@@ -7,6 +7,7 @@ package common
 import (
 	"encoding/hex"
 	"crypto/sha256"
+	"encoding/binary"
 )
 
 const (
@@ -69,23 +70,31 @@ func (addr Address) Hex() string {
 	return "0x" + hash.String()
 }
 
-func (addr Address) BytesToHash(b []byte) Address {
-	if len(b) > len(addr) {
+func (addr Address) Nil() bool {
+	return addr == Address{}
+}
+
+func BytesToAddress(b []byte) Address {
+	var addr Address
+	if len(b) > AddressLength {
 		b = b[:AddressLength]
 	}
 	copy(addr[:], b)
 	return addr
 }
 
+func CreateAddress(addr Address, nonce uint64) Address {
+	var buf = make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, nonce)
+	return BytesToAddress(Sha256(append(addr.Bytes(), buf...)).Bytes())
+}
+
 func HashToAddr(hash Hash) Address {
-	var addr Address
-	addr.BytesToHash(hash[:AddressLength])
-	return addr
+	return BytesToAddress(hash[:AddressLength])
 }
 
 func DecodeAddr(d []byte) Address {
-	var addr Address
 	dec := make([]byte, AddressLength)
 	hex.Decode(dec, d[2:])
-	return addr.BytesToHash(dec)
+	return BytesToAddress(dec)
 }

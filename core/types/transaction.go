@@ -85,6 +85,16 @@ func (tx *Transaction) Verify(pubKey crypto.PubKey) (bool, error) {
 	return equal, nil
 }
 
+func (tx *Transaction) AsEvent() Event {
+	return Event{
+		from:  tx.From,
+		to:    tx.To,
+		nonce: tx.Nonce,
+		value: tx.Value,
+		data:  tx.Payload,
+	}
+}
+
 // Event is a derived transaction and implements core.Event
 type Event struct {
 	from  common.Address

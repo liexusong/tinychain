@@ -14,6 +14,7 @@ var (
 	log       = common.GetLogger("blockchain")
 )
 
+// Blockchain is the canonical chain given a database with a genesis block
 type Blockchain struct {
 	db        *db.TinyDB       // chain db
 	lastBlock atomic.Value     // last block of chain
@@ -87,6 +88,7 @@ func (bc *Blockchain) GetHeader(hash common.Hash) (*types.Header, error) {
 	if err != nil {
 		return nil, err
 	}
+	bc.headerCache.Add(hash, header)
 	return header, nil
 }
 
@@ -96,5 +98,9 @@ func (bc *Blockchain) AddBlock() error {
 
 // Commit the blockchain to db
 func (bc *Blockchain) Commit() error {
+
+}
+
+func (bc *Blockchain) Engine() consensus.Engine {
 
 }

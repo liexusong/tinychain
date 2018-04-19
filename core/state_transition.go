@@ -38,6 +38,7 @@ func NewStateTransition(evm *vm.EVM, event Event) *StateTransition {
 	}
 }
 
+// Make state transition by applying a new event
 func ApplyEvent(evm *vm.EVM, event Event) ([]byte, error) {
 	return NewStateTransition(evm, event).Process()
 }
@@ -75,7 +76,7 @@ func (st *StateTransition) to() vm.AccountRef {
 		return vm.AccountRef{}
 	}
 
-	if (st.event.To() == common.Address{}) {
+	if st.event.To().Nil() {
 		return vm.AccountRef{}
 	}
 	to := st.event.To()
