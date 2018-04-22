@@ -22,6 +22,7 @@ func NewStateProcessor(bc *Blockchain, engine consensus.Engine, statedb *state.S
 	}
 }
 
+// Process apply transaction in state
 func (sp *StateProcessor) Process(block *types.Block) ([]*types.Receipt, error) {
 	var (
 		receipts []*types.Receipt

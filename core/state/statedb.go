@@ -23,11 +23,10 @@ type BucketTree interface {
 }
 
 type StateDB struct {
-	db  *cacheDB
-	bmt BucketTree
-
-	stateObjects      map[common.Address]*stateObject
-	stateObjectsDirty map[common.Address]struct{}
+	db                *cacheDB
+	bmt               BucketTree                      // bucket merkel tree of global state
+	stateObjects      map[common.Address]*stateObject // live state objects
+	stateObjectsDirty map[common.Address]struct{}     // dirty state objects
 }
 
 func New(db *leveldb.LDBDatabase, root common.Hash) *StateDB {

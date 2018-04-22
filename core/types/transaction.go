@@ -84,28 +84,3 @@ func (tx *Transaction) Verify(pubKey crypto.PubKey) (bool, error) {
 	}
 	return equal, nil
 }
-
-func (tx *Transaction) AsEvent() Event {
-	return Event{
-		from:  tx.From,
-		to:    tx.To,
-		nonce: tx.Nonce,
-		value: tx.Value,
-		data:  tx.Payload,
-	}
-}
-
-// Event is a derived transaction and implements core.Event
-type Event struct {
-	from  common.Address
-	to    common.Address
-	nonce uint64
-	value *big.Int
-	data  []byte
-}
-
-func (ev Event) From() common.Address { return ev.from }
-func (ev Event) To() common.Address   { return ev.to }
-func (ev Event) Nonce() uint64        { return ev.nonce }
-func (ev Event) Value() *big.Int      { return ev.value }
-func (ev Event) Data() []byte         { return ev.data }
