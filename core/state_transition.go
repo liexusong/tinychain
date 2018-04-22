@@ -28,7 +28,7 @@ func NewStateTransition(evm *vm.EVM, tx *types.Transaction) *StateTransition {
 }
 
 // Make state transition by applying a new event
-func ApplyEvent(evm *vm.EVM, tx *types.Transaction) ([]byte, error) {
+func ApplyTx(evm *vm.EVM, tx *types.Transaction) ([]byte, error) {
 	return NewStateTransition(evm, tx).Process()
 }
 

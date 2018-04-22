@@ -25,6 +25,10 @@ import (
 	"tinychain/core/vm"
 )
 
+var (
+	GASPRICE = int64(10)
+)
+
 // ChainContext supports retrieving headers and consensus parameters from the
 // current blockchain to be used during transaction processing.
 type ChainContext interface {
@@ -36,7 +40,7 @@ type ChainContext interface {
 }
 
 // NewEVMContext creates a new context for use in the EVM.
-func NewEVMContext(ev Event, header *types.Header, chain ChainContext, author *common.Address) vm.Context {
+func NewEVMContext(tx *types.Transaction, header *types.Header, chain ChainContext, author *common.Address) vm.Context {
 	// If we don't have an explicit author (i.e. not mining), extract from the header
 	var beneficiary common.Address
 	if author == nil {
@@ -44,17 +48,18 @@ func NewEVMContext(ev Event, header *types.Header, chain ChainContext, author *c
 	} else {
 		beneficiary = *author
 	}
+
 	return vm.Context{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
 		GetHash:     GetHashFn(header, chain),
-		Origin:      ev.From(),
+		Origin:      tx.From,
 		Coinbase:    beneficiary,
-		BlockNumber: new(big.Int).Set(header.Number),
+		BlockNumber: new(big.Int).Set(header.Height),
 		Time:        new(big.Int).Set(header.Time),
 		Difficulty:  new(big.Int).Set(header.Difficulty),
 		GasLimit:    header.GasLimit,
-		GasPrice:    new(big.Int).Set(ev.GasPrice()),
+		GasPrice:    big.NewInt(GASPRICE),
 	}
 }
 
@@ -66,7 +71,7 @@ func GetHashFn(ref *types.Header, chain ChainContext) func(n uint64) common.Hash
 		// If there's no hash cache yet, make one
 		if cache == nil {
 			cache = map[uint64]common.Hash{
-				ref.Number.Uint64() - 1: ref.ParentHash,
+				ref.Height.Uint64() - 1: ref.ParentHash,
 			}
 		}
 		// Try to fulfill the request from the cache

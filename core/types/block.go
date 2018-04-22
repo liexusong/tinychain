@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"encoding/binary"
 	"encoding/hex"
+	"tinychain/bmt"
+	"tinychain/core/state"
 )
 
 // BNonce is a 64-bit hash which proves that a sufficient amount of
@@ -53,7 +55,7 @@ type Header struct {
 	Coinbase   common.Address `json:"miner"`       // Miner address who receives reward of this block
 	Extra      []byte         `json:"extra"`       // Extra data
 	Nonce      BNonce         `json:"nonce"`       // Nonce produced by pow
-	Time       int64          `json:"time"`        // Timestamp
+	Time       *big.Int       `json:"time"`        // Timestamp
 }
 
 func NewHeader(
@@ -65,7 +67,7 @@ func NewHeader(
 	miner common.Address,
 	extra []byte,
 	nonce BNonce,
-	tm int64,
+	tm *big.Int,
 ) *Header {
 	header := &Header{
 		parentHash,
@@ -94,8 +96,8 @@ func (hd *Header) Desrialize(d []byte) error { return json.Unmarshal(d, hd) }
 type Block struct {
 	Header       *Header        `json:"header"`
 	Transactions []*Transaction `json:"transactions"`
-
-	Hash atomic.Value `json:"hash"` // Header hash
+	bmt          state.BucketTree             // temporary tx tree
+	Hash         atomic.Value   `json:"hash"` // Header hash
 
 	// Total difficulty, to avoid hard fork
 	// Tiny will accept the block  with the largest difficulty
@@ -112,13 +114,40 @@ func NewBlock(header *Header, txs []*Transaction, td *big.Int) *Block {
 	return block
 }
 
+func (bl *Block) TxRoot() common.Hash      { return bl.Header.TxRoot }
+func (bl *Block) ParentHash() common.Hash  { return bl.Header.ParentHash }
+func (bl *Block) Height() *big.Int         { return bl.Header.Height }
+func (bl *Block) StateRoot() common.Hash   { return bl.Header.StateRoot }
+func (bl *Block) Coinbase() common.Address { return bl.Header.Coinbase }
+func (bl *Block) Nonce() BNonce            { return bl.Header.Nonce }
+func (bl *Block) Extra() []byte            { return bl.Header.Extra }
+func (bl *Block) Difficulty() *big.Int     { return bl.Header.Difficulty }
+func (bl *Block) Time() *big.Int           { return bl.Header.Time }
+
 // Calculate hash of block
 // Combine header hash and transactions hash, and sha256 it
 func (bl *Block) SetHash() common.Hash {
 	hash := bl.Header.Hash()[:]
+	// Compute transaction hash root
+	txSet := bmt.WriteSet{}
 	for _, tx := range bl.Transactions {
-		hash = append(hash, tx.Hash()[:]...)
+		txSet[tx.Hash().String()] = tx.Hash().Bytes()
 	}
+
+	var tree state.BucketTree
+	if tree = bl.bmt; tree == nil {
+		tree = new(bmt.BucketTree)
+		bl.bmt = tree
+	}
+	tree.Init(nil)
+	tree.Prepare(txSet)
+	root, err := tree.Process()
+	if err != nil {
+		return common.Hash{}
+	}
+	bl.Header.TxRoot = root
+
+	hash = append(hash, root.Bytes()...)
 	return common.Sha256(hash)
 }
 

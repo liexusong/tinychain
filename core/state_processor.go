@@ -41,15 +41,13 @@ func (sp *StateProcessor) Process(block *types.Block) ([]*types.Receipt, error) 
 }
 
 func ApplyTransaction(bc *Blockchain, author *common.Address, statedb *state.StateDB, header *types.Header, tx *types.Transaction) (*types.Receipt, error) {
-	event := tx.AsEvent()
-
 	// Create a new context to be used in the EVM environment
-	context := NewEVMContext(event, header, bc, author)
+	context := NewEVMContext(tx, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms
-	vm := vm.NewEVM(context, statedb, nil, nil)
+	vmenv := vm.NewEVM(context, statedb, nil, nil)
 	// Apply the tx to current state
-	_, err := ApplyEvent(vm, event)
+	_, err := ApplyTx(vmenv, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +57,9 @@ func ApplyTransaction(bc *Blockchain, author *common.Address, statedb *state.Sta
 		return nil, err
 	}
 	receipt := types.NewRecipet(root, false, tx.Hash())
-	if event.To().Nil() {
+	if tx.To.Nil() {
 		// Create contract call
-		receipt.SetContractAddress(common.CreateAddress(event.From(), event.Nonce()))
+		receipt.SetContractAddress(common.CreateAddress(tx.From, tx.Nonce))
 	}
 
 	return receipt, nil
