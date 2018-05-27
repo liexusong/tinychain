@@ -61,9 +61,9 @@ func (st *StateTransition) to() vm.AccountRef {
 		return vm.AccountRef{}
 	}
 	to := st.tx.To
-	if !st.statedb.Exist(to) {
-		st.statedb.CreateAccount(to)
-	}
+	//if !st.statedb.Exist(to) {
+	//	st.statedb.CreateAccount(to)
+	//}
 	return vm.AccountRef(to)
 }
 
@@ -92,6 +92,7 @@ func (st *StateTransition) Process() ([]byte, error) {
 		ret, _, leftGas, vmerr = st.evm.Create(st.to(), st.data(), MaxGas, st.value())
 	} else {
 		// Call contract
+		st.statedb.SetNonce(st.from().Address(), st.statedb.GetNonce(st.from().Address())+1)
 		ret, leftGas, vmerr = st.evm.Call(st.from(), st.to().Address(), st.data(), MaxGas, st.value())
 	}
 	if vmerr != nil {
