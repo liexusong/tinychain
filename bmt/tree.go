@@ -5,7 +5,7 @@ import (
 	"tinychain/common"
 	"tinychain/db/leveldb"
 	"sync"
-	"github.com/pkg/errors"
+	"errors"
 )
 
 var (

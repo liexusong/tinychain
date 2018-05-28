@@ -1,5 +1,7 @@
 package event
 
+const CHAN_BUFFER = 100
+
 type Subscription interface {
 	Unsubscribe()             // Remove the target channel, and close err channel
 	Chan() <-chan interface{} // Get the channel
@@ -14,7 +16,7 @@ type muxSub struct {
 func newMuxSub(mu *TypeMux) *muxSub {
 	return &muxSub{
 		mu:      mu,
-		channel: make(chan interface{}),
+		channel: make(chan interface{}, CHAN_BUFFER),
 	}
 }
 
