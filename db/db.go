@@ -39,8 +39,8 @@ type TinyDB struct {
 	db *leveldb.LDBDatabase
 }
 
-func NewTinyDB() (*TinyDB, error) {
-	db, err := leveldb.NewLDBDataBase(nil, "database")
+func newTinyDB() (*TinyDB, error) {
+	db, err := leveldb.NewLDBDataBase("tinyDatabase")
 	if err != nil {
 		log.Errorf("Failed to create leveldb, %s", err)
 		return nil, err
@@ -226,7 +226,7 @@ func GetTinyDB() *TinyDB {
 		return tinydb
 	}
 
-	db, err := NewTinyDB()
+	db, err := newTinyDB()
 	if err != nil {
 		return nil
 	}

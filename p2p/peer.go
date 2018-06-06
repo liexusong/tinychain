@@ -8,18 +8,81 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	"tinychain/p2p/pb"
-	"sync"
 	"time"
 	"github.com/pkg/errors"
 	"tinychain/common"
+	"github.com/libp2p/go-libp2p-protocol"
+	"fmt"
+	"crypto/rand"
+	"github.com/libp2p/go-libp2p-crypto"
+	"github.com/libp2p/go-libp2p-swarm"
 )
 
 var (
-	TransProtocol = "/chain/1.0.0."
+	TransProtocol = protocol.ID("/chain/1.0.0.")
 	log           = common.GetLogger("p2p")
 )
 
-// Peer stands for a logical peer of p2p layer
+// NewHost construct a host of libp2p
+func newHost(port int, privKey crypto.PrivKey) (*bhost.BasicHost, error) {
+	var (
+		priv crypto.PrivKey
+		pub  crypto.PubKey
+	)
+	if privKey == nil {
+		var err error
+		//priv, pub, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
+		priv, pub, err = crypto.GenerateEd25519Key(rand.Reader)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+		pubB64, _ := peer.IDFromPublicKey(pub)
+		privB64, _ := B64EncodePrivKey(priv)
+
+		log.Info("Private key not found in config file.")
+		log.Info("Generate new key pair of privkey and pubkey by Ed25519:")
+		log.Infof("Pubkey:%s\n", pubB64)
+		log.Infof("Privkey:%s\n", privB64)
+	} else {
+		priv = privKey
+		pub = privKey.GetPublic()
+	}
+	//privKey, _ := crypto.MarshalPrivateKey(priv)
+	//data := crypto.ConfigEncodeKey(privKey)
+	//log.Info(data)
+	pid, err := peer.IDFromPublicKey(pub)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	addr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port))
+	if err != nil {
+		log.Infof("New multiaddr:%s\n", err)
+		log.Error(err)
+		return nil, err
+	}
+
+	pstore := pstore.NewPeerstore()
+	pstore.AddPrivKey(pid, priv)
+	pstore.AddPubKey(pid, pub)
+
+	ctx := context.Background()
+	n := swarm.NewSwarm(ctx, pid, pstore, nil)
+	err = n.Listen(addr)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	opts := &bhost.HostOpts{
+		NATManager: bhost.NewNATManager,
+	}
+	return bhost.NewHost(ctx, n, opts)
+}
+
+// Peer stands for a logical peer of tinychain's p2p layer
 type Peer struct {
 	host       *bhost.BasicHost // Local peer host
 	routeTable *RouteTable      // Local route table
@@ -32,7 +95,7 @@ type Peer struct {
 
 // Creates new peer struct
 func NewPeer(config *Config) (*Peer, error) {
-	host, err := NewHost(config.port, config.privKey)
+	host, err := newHost(config.port, config.privKey)
 	if err != nil {
 		log.Errorf("Cannot create host:%s", err)
 		return nil, err
