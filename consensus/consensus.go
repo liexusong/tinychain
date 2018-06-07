@@ -1,8 +1,8 @@
 package consensus
 
-type Engine interface {
-	VerifyHeader() error
-
-	VerifyBlock() error
-
+type Consensus interface {
+	Name() string
+	Start() error
+	Stop() error
 }
+

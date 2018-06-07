@@ -7,9 +7,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	pa "path/filepath"
-	"github.com/hyperchain/hyperchain/common"
-	"github.com/hyperchain/hyperchain/hyperdb/db"
+	"fmt"
 )
 
 var log *logging.Logger // package-level logger
@@ -36,10 +34,7 @@ type LDBDatabase struct {
 // DB can be recovered with Recover function.
 // the return *LDBDatabase is goruntine-safe
 // the LDBDataBase instance must be close after use, by calling Close method
-func NewLDBDataBase(conf *common.Config, filepath string) (*LDBDatabase, error) {
-	if conf != nil {
-		filepath = pa.Join(conf.GetString(LEVEL_DB_PATH), filepath)
-	}
+func NewLDBDataBase(filepath string) (*LDBDatabase, error) {
 	db, err := leveldb.OpenFile(filepath, nil)
 	return &LDBDatabase{
 		path: filepath,
@@ -58,7 +53,7 @@ func (self *LDBDatabase) Put(key []byte, value []byte) error {
 func (self *LDBDatabase) Get(key []byte) ([]byte, error) {
 	dat, err := self.db.Get(key, nil)
 	if err != nil {
-		err = db.DB_NOT_FOUND
+		err = errors.New(fmt.Sprintf("%s not found", string(key)))
 	}
 	return dat, err
 }
@@ -69,7 +64,7 @@ func (self *LDBDatabase) Delete(key []byte) error {
 }
 
 // NewIterator returns a Iterator for traversing the database
-func (self *LDBDatabase) NewIterator(prefix []byte) db.Iterator {
+func (self *LDBDatabase) NewIterator(prefix []byte) iterator.Iterator {
 	return self.db.NewIterator(util.BytesPrefix(prefix), nil)
 }
 
@@ -110,7 +105,7 @@ func (self *LDBDatabase) LDB() *leveldb.DB {
 
 // NewBatch returns a Batch instance
 // it allows batch-operation
-func (db *LDBDatabase) NewBatch() db.Batch {
+func (db *LDBDatabase) NewBatch() *ldbBatch {
 	return &ldbBatch{db: db.db, b: new(leveldb.Batch)}
 }
 
@@ -136,10 +131,6 @@ func (b *ldbBatch) Delete(key []byte) error {
 // Write write batch-operation to database
 func (b *ldbBatch) Write() error {
 	return b.db.Write(b.b, nil)
-}
-
-func (b *ldbBatch) WriteTo(i interface{}) error {
-	return nil
 }
 
 func (b *ldbBatch) Len() int {

@@ -1,4 +1,17 @@
 package event
 
-type BlockEvent struct {
+/*
+	Block events
+ */
+type NewBlockEvent struct {
 }
+
+type BlockBroadcastEvent struct{}
+
+
+/*
+	Transaction events
+ */
+type NewTxEvent struct{}
+
+type TxBroadcastEvent struct{}

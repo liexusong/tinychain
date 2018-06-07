@@ -15,7 +15,7 @@ var (
 
 func CreateBucketTree() *BucketTree {
 	if db == nil {
-		db, _ = leveldb.NewLDBDataBase(nil, "bucket_tree_test")
+		db, _ = leveldb.NewLDBDataBase("bucket_tree_test")
 	}
 	return NewBucketTree(db)
 }

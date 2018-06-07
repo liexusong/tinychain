@@ -2,7 +2,7 @@ package p2p
 
 import (
 	"github.com/libp2p/go-libp2p-peerstore"
-	"github.com/libp2p/go-libp2p-kbucket"
+	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	"time"
 	"github.com/libp2p/go-libp2p-peer"
 	ma "github.com/multiformats/go-multiaddr"
