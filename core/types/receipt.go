@@ -3,6 +3,7 @@ package types
 import (
 	"tinychain/common"
 	"math/big"
+	json "github.com/json-iterator/go"
 )
 
 // Receipt represents the results of a transaction
@@ -26,4 +27,23 @@ func NewRecipet(root common.Hash, status bool, txHash common.Hash, gasUsed *big.
 
 func (re *Receipt) SetContractAddress(addr common.Address) {
 	re.ContractAddress = addr
+}
+
+func (re *Receipt) Serialize() ([]byte, error) {
+	return json.Marshal(re)
+}
+
+func (re *Receipt) Deserialize(d []byte) error {
+	return json.Unmarshal(d, re)
+}
+
+type Receipts []*Receipt
+
+func (rps Receipts) Hash() common.Hash {
+	var hash []byte
+	for _, receipt := range rps {
+		data, _ := receipt.Serialize()
+		hash = append(hash, data...)
+	}
+	return common.Sha256(hash)
 }

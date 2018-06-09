@@ -256,3 +256,21 @@ func pow(a, m int) int {
 	}
 	return a * pow(a, m-1)
 }
+
+func Hash(set WriteSet) (common.Hash, error) {
+	tree := new(BucketTree)
+	tree.Init(nil)
+	tree.Prepare(set)
+	root, err := tree.Process()
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return root, nil
+}
+
+func Commit(set WriteSet, db *leveldb.LDBDatabase) error {
+	tree := NewBucketTree(db)
+	tree.Init(nil)
+	tree.Prepare(set)
+	return tree.Commit()
+}

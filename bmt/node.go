@@ -2,7 +2,7 @@ package bmt
 
 import (
 	"tinychain/common"
-	"encoding/json"
+	json "github.com/json-iterator/go"
 	"sync"
 )
 

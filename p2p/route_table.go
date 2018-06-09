@@ -2,7 +2,7 @@ package p2p
 
 import (
 	"github.com/libp2p/go-libp2p-peerstore"
-	kbucket "github.com/libp2p/go-libp2p-kbucket"
+	"github.com/libp2p/go-libp2p-kbucket"
 	"time"
 	"github.com/libp2p/go-libp2p-peer"
 	ma "github.com/multiformats/go-multiaddr"
@@ -55,8 +55,17 @@ func NewRouteTable(config *Config, peer *Peer) *RouteTable {
 	return table
 }
 
-func (table *RouteTable) Initialize() {
+// Start route table looping for route sync
+func (table *RouteTable) Start() {
+	log.Info("Start route table sync...")
+	table.LoadRTableFromFile()
 	go table.syncLoop()
+}
+
+// Stop route table if is looping sync
+func (table *RouteTable) Stop() {
+	log.Info("Stop route table.")
+	close(table.quitCh)
 }
 
 func (table *RouteTable) Peers() map[peer.ID][]ma.Multiaddr {
@@ -221,7 +230,7 @@ func (table *RouteTable) SyncFromPeer(pid peer.ID) error {
 	stream := NewStreamWithPid(pid, table.peer)
 	//}
 
-	return stream.SendMessage(pb.ROUTESYNC_REQ, nil)
+	return stream.send(pb.ROUTESYNC_REQ, nil)
 }
 
 // Start sync route table looping
@@ -246,19 +255,6 @@ func (table *RouteTable) refreshLoop() {
 			return
 		}
 	}
-}
-
-// Start route table looping for route sync
-func (table *RouteTable) Start() {
-	log.Info("Start route table sync...")
-	table.LoadRTableFromFile()
-	go table.syncLoop()
-}
-
-// Stop route table if is looping sync
-func (table *RouteTable) Stop() {
-	log.Info("Stop route table.")
-	close(table.quitCh)
 }
 
 // Load route table from file

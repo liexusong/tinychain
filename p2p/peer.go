@@ -16,6 +16,8 @@ import (
 	"crypto/rand"
 	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/libp2p/go-libp2p-swarm"
+	"sync"
+	"tinychain/event"
 )
 
 var (
@@ -90,23 +92,30 @@ type Peer struct {
 	respCh     chan *pb.Message // Response channel. Receive message from stream.
 	quitCh     chan struct{}
 
+	mu       sync.RWMutex
+	handlers map[string][]*Handler // Handlers of upper layer
+
 	timeout time.Duration // Timeout of per connection
+
+	mux *event.TypeMux
 }
 
 // Creates new peer struct
-func NewPeer(config *Config) (*Peer, error) {
+func New(config *Config, mux *event.TypeMux) (*Peer, error) {
 	host, err := newHost(config.port, config.privKey)
 	if err != nil {
-		log.Errorf("Cannot create host:%s", err)
+		log.Errorf("Cannot create host: %s", err)
 		return nil, err
 	}
 
 	peer := &Peer{
-		host:    host,
-		context: context.Background(),
-		respCh:  make(chan *pb.Message, 100),
-		quitCh:  make(chan struct{}),
-		timeout: time.Second * 60,
+		host:     host,
+		context:  context.Background(),
+		respCh:   make(chan *pb.Message, 100),
+		quitCh:   make(chan struct{}),
+		timeout:  time.Second * 60,
+		handlers: make(map[string][]*Handler),
+		mux:      mux,
 	}
 	peer.routeTable = NewRouteTable(config, peer)
 
@@ -136,7 +145,7 @@ func (peer *Peer) Connect(pid peer.ID) error {
 }
 
 // Send message to a peer
-func (peer *Peer) SendMessage(pid peer.ID, name string, data interface{}) error {
+func (peer *Peer) Send(pid peer.ID, name string, data interface{}) error {
 	if pid == peer.ID() {
 		log.Info("Cannot send message to peer itself.")
 		return errors.New("Send message to self")
@@ -147,7 +156,7 @@ func (peer *Peer) SendMessage(pid peer.ID, name string, data interface{}) error 
 	}
 	stream := NewStreamWithPid(pid, peer)
 	//peer.Streams.AddStream(stream)
-	return stream.SendMessage(name, data)
+	return stream.send(name, data)
 }
 
 func (peer *Peer) Start() {
@@ -168,6 +177,7 @@ func (peer *Peer) Stop() {
 	}
 	peer.routeTable.Stop()
 	peer.quitCh <- struct{}{}
+	log.Info("Stop peer.")
 }
 
 func (peer *Peer) ListenMsg() {
@@ -177,6 +187,12 @@ func (peer *Peer) ListenMsg() {
 			break
 		case message := <-peer.respCh:
 			log.Infof("Receive message: Name:%s, data:%s \n", message.Name, message.Data)
+			// Handler run
+			peer.mu.RLock()
+			for _, handler := range peer.handlers[message.Name] {
+				go handler.Run(message)
+			}
+			peer.mu.RUnlock()
 		}
 	}
 }
@@ -186,7 +202,7 @@ func (peer *Peer) onStreamConnected(s libnet.Stream) {
 	stream := NewStream(s.Conn().RemotePeer(), s.Conn().RemoteMultiaddr(), s, peer)
 
 	//peer.Streams.AddStream(stream)
-	stream.StartLoop()
+	stream.start()
 }
 
 func (peer *Peer) Broadcast(pbName string, data interface{}) {
@@ -195,6 +211,6 @@ func (peer *Peer) Broadcast(pbName string, data interface{}) {
 			continue
 		}
 		stream := NewStreamWithPid(pid, peer)
-		go stream.SendMessage(pbName, data)
+		go stream.send(pbName, data)
 	}
 }

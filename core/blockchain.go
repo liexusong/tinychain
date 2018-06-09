@@ -7,6 +7,7 @@ import (
 	"tinychain/consensus"
 	"tinychain/common"
 	"sync/atomic"
+	"sync"
 )
 
 var (
@@ -21,6 +22,8 @@ type Blockchain struct {
 	engine    consensus.Engine // consensus engine
 	// TODO more fields
 
+	dirtyBlk    sync.Map   // dirty block map
+	dirtyHdr    sync.Map   // dirty header map
 	blocksCache *lru.Cache // blocks lru cache
 	headerCache *lru.Cache // headers lru cache
 }
@@ -35,19 +38,21 @@ func NewBlockchain(db *db.TinyDB, engine consensus.Engine) (*Blockchain, error) 
 		headerCache: headerCache,
 	}
 	if err := bc.loadLastState(); err != nil {
+		log.Errorf("Failed to load last state from db, %s", err)
 		return nil, err
 	}
 	return bc, nil
 }
 
+// loadLastState load the latest state of blockchain
 func (bc *Blockchain) loadLastState() error {
 	lastBlock, err := bc.db.GetLastBlock()
 	if err != nil {
+		// Should create genensis block
 		return err
 	}
 	bc.lastBlock.Store(lastBlock)
-	bc.blocksCache.Add(lastBlock.Hash, lastBlock)
-
+	bc.blocksCache.Add(lastBlock.Hash(), lastBlock)
 	// TODO
 
 	return nil
@@ -92,15 +97,15 @@ func (bc *Blockchain) GetHeader(hash common.Hash) (*types.Header, error) {
 	return header, nil
 }
 
-func (bc *Blockchain) AddBlock() error {
+func (bc *Blockchain) AddBlock(block *types.Block) error {
 
 }
 
 // Commit the blockchain to db
-func (bc *Blockchain) Commit() error {
+func (bc *Blockchain) Commit(db *db.TinyDB) error {
 
 }
 
 func (bc *Blockchain) Engine() consensus.Engine {
-
+	return bc.engine
 }

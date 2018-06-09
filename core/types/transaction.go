@@ -4,15 +4,18 @@ import (
 	"math/big"
 	"sync/atomic"
 	"tinychain/common"
-	"encoding/json"
+	json "github.com/json-iterator/go"
 	"github.com/libp2p/go-libp2p-crypto"
 	"errors"
+	"tinychain/bmt"
+	"tinychain/db/leveldb"
 )
 
 type Transaction struct {
 	txData
 
-	TxHash    atomic.Value `json:"hash"`
+	txHash atomic.Value // hash cache
+
 	Signature atomic.Value `json:"signature"` // Signature of tx
 }
 
@@ -47,13 +50,13 @@ func (tx *Transaction) Serialize() ([]byte, error) { return json.Marshal(tx) }
 func (tx *Transaction) Deserialize(d []byte) error { return json.Unmarshal(d, tx) }
 
 func (tx *Transaction) Hash() common.Hash {
-	if hash := tx.TxHash.Load(); hash != nil {
+	if hash := tx.txHash.Load(); hash != nil {
 		return hash.(common.Hash)
 	}
 	txdata := NewTxData(tx.Nonce, tx.Gas, tx.Value, tx.Payload, tx.From, tx.To)
 	data, _ := txdata.Serialize()
 	h := common.Sha256(data)
-	tx.TxHash.Store(h)
+	tx.txHash.Store(h)
 	return h
 }
 
@@ -83,4 +86,39 @@ func (tx *Transaction) Verify(pubKey crypto.PubKey) (bool, error) {
 		return false, errors.New("error occur during sign verification")
 	}
 	return equal, nil
+}
+
+type Transactions []*Transaction
+
+func (txs Transactions) Hash() common.Hash {
+	txSet := bmt.WriteSet{}
+	for _, tx := range txs {
+		txSet[tx.Hash().String()] = tx.Hash().Bytes()
+	}
+	root, _ := bmt.Hash(txSet)
+	return root
+}
+
+func (txs Transactions) Commit(db *leveldb.LDBDatabase) error {
+	txSet := bmt.WriteSet{}
+	for _, tx := range txs {
+		txSet[tx.Hash().String()] = tx.Hash().Bytes()
+	}
+	return bmt.Commit(txSet, db)
+}
+
+// TxMeta represents the meta data of a transaction,
+// contains the index of transacitons in a certain block
+type TxMeta struct {
+	Hash    common.Hash `json:"block_hash"`
+	Height  *big.Int    `json:"height"`
+	TxIndex uint64      `json:"tx_index"`
+}
+
+func (tm *TxMeta) Serialize() ([]byte, error) {
+	return json.Marshal(tm)
+}
+
+func (tm *TxMeta) Deserialize(d []byte) error {
+	return json.Unmarshal(d, tm)
 }

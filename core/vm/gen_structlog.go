@@ -3,7 +3,7 @@
 package vm
 
 import (
-	"encoding/json"
+	json "github.com/json-iterator/go"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"

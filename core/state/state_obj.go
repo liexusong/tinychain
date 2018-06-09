@@ -3,7 +3,7 @@ package state
 import (
 	"tinychain/common"
 	"math/big"
-	"encoding/json"
+	json "github.com/json-iterator/go"
 	"tinychain/db/leveldb"
 	"tinychain/bmt"
 )

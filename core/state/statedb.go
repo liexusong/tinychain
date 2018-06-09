@@ -207,5 +207,3 @@ func (sdb *StateDB) Commit() error {
 	}
 	return nil
 }
-
-

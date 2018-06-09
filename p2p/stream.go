@@ -47,7 +47,7 @@ func NewStream(pid peer.ID, addr ma.Multiaddr, stream libnet.Stream, peer *Peer)
 }
 
 // Connect to remote peer
-func (s *Stream) Connect() error {
+func (s *Stream) connect() error {
 	stream, err := s.peer.host.NewStream(
 		s.peer.context,
 		s.remoteId,
@@ -61,7 +61,7 @@ func (s *Stream) Connect() error {
 	s.remoteAddr = stream.Conn().RemoteMultiaddr()
 	//log.Infof("Connect to Peer. Info: %s\n", s.remoteAddr)
 
-	s.StartLoop()
+	s.start()
 
 	return nil
 }
@@ -94,15 +94,15 @@ func (s *Stream) Close(reason error) {
 	}
 }
 
-func (s *Stream) StartLoop() {
+func (s *Stream) start() {
 	//log.Infof("Stream to %s starts loop\n", s.remoteId)
 	//go s.writeLoop()
 	go s.readLoop()
 }
 
-func (s *Stream) SendMessage(name string, data interface{}) error {
+func (s *Stream) send(name string, data interface{}) error {
 	if s.stream == nil {
-		if err := s.Connect(); err != nil {
+		if err := s.connect(); err != nil {
 			return err
 		}
 	}
@@ -147,10 +147,10 @@ func (s *Stream) SetReadDeadline(name string) {
 		fallthrough
 	case pb.ROUTESYNC_RESP:
 		s.stream.SetReadDeadline(time.Now().Add(routeSyncTimeout))
-	case pb.NORMAL_MSG:
-		s.stream.SetReadDeadline(time.Now().Add(normalTimeout))
 	case pb.OK_MSG:
 		s.stream.SetReadDeadline(time.Now().Add(okTimeout))
+	default:
+		s.stream.SetReadDeadline(time.Now().Add(normalTimeout))
 	}
 }
 
@@ -168,7 +168,7 @@ func (s *Stream) SetReadDeadline(name string) {
 
 func (s *Stream) readLoop() {
 	if s.stream == nil {
-		if err := s.Connect(); err != nil {
+		if err := s.connect(); err != nil {
 			s.Close(err)
 			return
 		}
@@ -243,9 +243,6 @@ func (s *Stream) handleMsg(message *pb.Message) error {
 	// Discover and update remote peer in local route table
 	s.peer.routeTable.AddPeer(s.remoteId, s.remoteAddr)
 
-	// Notice peer
-	go func() { s.peer.respCh <- message }()
-
 	// Handle message
 	pbName := message.Name
 	log.Infof("Peer %s receive pb `%s`\n", s.peer.ID(), pbName)
@@ -260,8 +257,10 @@ func (s *Stream) handleMsg(message *pb.Message) error {
 		s.Close(nil)
 		// Update local route table
 		return s.syncRoute(message.Data)
-	case pb.NORMAL_MSG:
-		log.Infof("Message content: %s\n", message.Data)
+	default:
+		// Message from other modules
+		//log.Infof("Message content: %s\n", message.Data)
+		s.peer.respCh <- message
 		s.Close(nil)
 		return nil
 	}
@@ -286,8 +285,10 @@ func (s *Stream) onSyncRoute() error {
 		}
 		peerInfos[i] = pinfo
 	}
-	peerData := &pb.PeerData{peerInfos}
-	return s.SendMessage(pb.ROUTESYNC_RESP, peerData)
+	peerData := &pb.PeerData{
+		Peers: peerInfos,
+	}
+	return s.send(pb.ROUTESYNC_RESP, peerData)
 }
 
 // Receive `ROUTESYNC_RESP` and Update local route table

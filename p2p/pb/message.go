@@ -20,14 +20,15 @@ const (
 	ROUTESYNC_REQ  = "routesync_req"
 	ROUTESYNC_RESP = "routesync_resp"
 
-	NORMAL_MSG = "normal_msg"
-
 	DATA_LENGTH_SIZE = uint32(4)
 	DATA_MAX_LENGTH  = uint32(4 * 1024 * 1024)
 )
 
 func NewMessage(name string, data []byte) (*Message, error) {
-	msg := &Message{name, data}
+	msg := &Message{
+		Name: name,
+		Data: data,
+	}
 	if msg.Length() > DATA_MAX_LENGTH {
 		return nil, errors.New("Message data is too long")
 	}

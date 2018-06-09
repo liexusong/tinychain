@@ -4,7 +4,7 @@ import (
 	"tinychain/common"
 	"encoding/binary"
 	"sync"
-	"encoding/json"
+	json "github.com/json-iterator/go"
 	"bytes"
 	"errors"
 	"sort"
