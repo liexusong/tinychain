@@ -30,21 +30,16 @@ const (
 )
 
 var (
-	tinydb *TinyDB
 	log    = common.GetLogger("tinydb")
 )
 
+// TinyDB stores and manages blockchain data
 type TinyDB struct {
 	db *leveldb.LDBDatabase
 }
 
-func NewTinyDB() (*TinyDB, error) {
-	db, err := leveldb.NewLDBDataBase("tinyDatabase")
-	if err != nil {
-		return nil, err
-	}
-
-	return &TinyDB{db}, nil
+func NewTinyDB(db *leveldb.LDBDatabase) *TinyDB {
+	return &TinyDB{db}
 }
 
 func (tdb *TinyDB) LDB() *leveldb.LDBDatabase {
@@ -233,18 +228,4 @@ func (tdb *TinyDB) PutTxMetaInBatch(block *types.Block) error {
 		batch.Put([]byte("l"+tx.Hash().String()), data)
 	}
 	return batch.Write()
-}
-
-func GetTinyDB() *TinyDB {
-	if tinydb != nil {
-		log.Info("TinyDB has not created, create one")
-		return tinydb
-	}
-
-	db, err := NewTinyDB()
-	if err != nil {
-		return nil
-	}
-	tinydb = db
-	return tinydb
 }

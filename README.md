@@ -7,7 +7,7 @@ A tiny blockchain
     2. POW + DPOS
     3. Algorand maybe?
 - Transaction
-    - obey to EVM gas-using rules but not actually use gas
+    - obey to EVM gas-using rules
     - fix gas limit of contract (virtually)
 
 ## Tech stack

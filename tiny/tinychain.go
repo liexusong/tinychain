@@ -7,6 +7,9 @@ import (
 	"tinychain/db"
 	"tinychain/p2p"
 	"tinychain/common"
+	"tinychain/executor"
+	"tinychain/db/leveldb"
+	"tinychain/core/state"
 )
 
 var (
@@ -25,17 +28,26 @@ type Tinychain struct {
 
 	db *db.TinyDB
 
+	state *state.StateDB
+
 	network *p2p.Peer
+
+	executor executor.Executor
 }
 
 func New(config *Config) (*Tinychain, error) {
 	eventHub := event.NewTypeMux()
 
-	tinyDB, err := db.NewTinyDB()
+	ldb, err := leveldb.NewLDBDataBase("tinychain")
 	if err != nil {
-		log.Error("Failed to create leveldb")
+		log.Errorf("Cannot create db, %s", err)
 		return nil, err
 	}
+	// Create tiny db
+	tinyDB := db.NewTinyDB(ldb)
+	// Create state db
+	statedb := state.New(ldb)
+
 	peer, err := p2p.New(&config.p2p, eventHub)
 	if err != nil {
 		log.Error("Failed to create p2p peer")

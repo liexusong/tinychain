@@ -1,13 +1,22 @@
 package executor
 
-import "tinychain/core/types"
+import (
+	"tinychain/core/types"
+	"tinychain/core"
+)
 
 type ValidateImpl struct {
-	block BlockValidator
-	tx    TxValidator
-	state TxValidator
+	processor core.Processor // Block processor
 }
 
+func NewValidator(processor core.Processor) *ValidateImpl {
+	return &ValidateImpl{
+		processor: processor,
+	}
+}
+
+// Validate transactions
+// 1.
 func (v *ValidateImpl) ValidateTx(tx *types.Transaction) error {
 
 }
@@ -17,15 +26,14 @@ func (v *ValidateImpl) ValidateTx(tx *types.Transaction) error {
 // 2. Validate gasUsed and gasLimit
 // 3. Validate parentHash and height
 // 4. Validate extra data size is within bounds
-func (v *ValidateImpl) ValidateHeader() error {
+func (v *ValidateImpl) ValidateHeader(block *types.Block) error {
 
 }
 
 // Validate block txs
 // 1. Validate txs root hash
 // 2. Validate receipts root hash
-func (v *ValidateImpl) ValidateBody() error {
-
+func (v *ValidateImpl) ValidateBody(block *types.Block) error {
 }
 
 // Validate block state and receipts

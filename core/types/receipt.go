@@ -2,7 +2,6 @@ package types
 
 import (
 	"tinychain/common"
-	"math/big"
 	json "github.com/json-iterator/go"
 )
 
@@ -13,10 +12,10 @@ type Receipt struct {
 	Status          bool           `json:"status"`           // Transaction executing success or failed
 	TxHash          common.Hash    `json:"tx_hash"`          // Transaction hash
 	ContractAddress common.Address `json:"contract_address"` // Contract address
-	GasUsed         *big.Int       `json:"gas_used"`         // gas used of transaction
+	GasUsed         uint64       `json:"gas_used"`         // gas used of transaction
 }
 
-func NewRecipet(root common.Hash, status bool, txHash common.Hash, gasUsed *big.Int) *Receipt {
+func NewRecipet(root common.Hash, status bool, txHash common.Hash, gasUsed uint64) *Receipt {
 	return &Receipt{
 		PostState: root,
 		Status:    status,

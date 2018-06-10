@@ -28,7 +28,7 @@ func NewStateTransition(evm *vm.EVM, tx *types.Transaction) *StateTransition {
 }
 
 // Make state transition by applying a new event
-func ApplyTx(evm *vm.EVM, tx *types.Transaction) ([]byte, error) {
+func ApplyTx(evm *vm.EVM, tx *types.Transaction) ([]byte, uint64, bool, error) {
 	return NewStateTransition(evm, tx).Process()
 }
 
@@ -71,15 +71,18 @@ func (st *StateTransition) data() []byte {
 	return st.tx.Payload
 }
 
+func (st *StateTransition) gas() uint64 {
+	return st.tx.Gas
+}
+
 func (st *StateTransition) value() *big.Int {
 	return st.tx.Value
 }
 
 // Make state transition according to transaction event
-// NOTE: In tinychain we need not use gas to pay a transaction
-func (st *StateTransition) Process() ([]byte, error) {
+func (st *StateTransition) Process() ([]byte, uint64, bool, error) {
 	if err := st.preCheck(); err != nil {
-		return nil, err
+		return nil, 0, false, err
 	}
 
 	var (
@@ -89,7 +92,7 @@ func (st *StateTransition) Process() ([]byte, error) {
 	)
 	if (st.to() == vm.AccountRef{}) {
 		// Contract create
-		ret, _, leftGas, vmerr = st.evm.Create(st.to(), st.data(), MaxGas, st.value())
+		ret, _, leftGas, vmerr = st.evm.Create(st.to(), st.data(), st.gas(), st.value())
 	} else {
 		// Call contract
 		st.statedb.SetNonce(st.from().Address(), st.statedb.GetNonce(st.from().Address())+1)
@@ -97,8 +100,13 @@ func (st *StateTransition) Process() ([]byte, error) {
 	}
 	if vmerr != nil {
 		log.Errorf("VM returned with error %s", vmerr)
-		return nil, vmerr
+		if vmerr == vm.ErrInsufficientBalance {
+			return nil, 0, false, vmerr
+		}
 	}
-	st.statedb.AddBalance(st.evm.Coinbase, new(big.Int).SetUint64(MaxGas-leftGas))
-	return ret, nil
+	gasUsed := st.gas() - leftGas
+	st.statedb.SubBalance(st.from().Address(), new(big.Int).SetUint64(gasUsed))
+	st.statedb.AddBalance(st.evm.Coinbase, new(big.Int).SetUint64(gasUsed))
+
+	return ret, gasUsed, vmerr != nil, nil
 }

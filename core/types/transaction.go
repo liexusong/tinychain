@@ -21,18 +21,18 @@ type Transaction struct {
 
 type txData struct {
 	Nonce   uint64         `json:"nonce"` // Account nonce, which is used to avoid double spending
-	Gas     *big.Int       `json:"gas"`   // Gas used
+	Gas     uint64         `json:"gas"`   // Gas used
 	Value   *big.Int       `json:"value"` // Transferring value
 	From    common.Address `json:"from"`
 	To      common.Address `json:"to"` // Recipient of this tx, nil means contract creation
 	Payload []byte         `json:"payload"`
 }
 
-func NewTransaction(nonce uint64, gas, value *big.Int, payload []byte, from, to common.Address) *Transaction {
+func NewTransaction(nonce uint64, gas uint64, value *big.Int, payload []byte, from, to common.Address) *Transaction {
 	return &Transaction{txData: NewTxData(nonce, gas, value, payload, from, to)}
 }
 
-func NewTxData(nonce uint64, gas, value *big.Int, payload []byte, from, to common.Address) txData {
+func NewTxData(nonce uint64, gas uint64, value *big.Int, payload []byte, from, to common.Address) txData {
 	return txData{
 		Nonce:   nonce,
 		Gas:     gas,
