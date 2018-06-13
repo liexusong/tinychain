@@ -20,6 +20,10 @@ import (
 	"tinychain/event"
 )
 
+const (
+	MaxRespBufSize = 100
+)
+
 var (
 	TransProtocol = protocol.ID("/chain/1.0.0.")
 	log           = common.GetLogger("p2p")
@@ -92,8 +96,8 @@ type Peer struct {
 	respCh     chan *pb.Message // Response channel. Receive message from stream.
 	quitCh     chan struct{}
 
-	mu       sync.RWMutex
-	handlers map[string][]*Handler // Handlers of upper layer
+	mu        sync.RWMutex
+	protocols map[string][]*Protocol // Handlers of upper layer
 
 	timeout time.Duration // Timeout of per connection
 
@@ -101,7 +105,7 @@ type Peer struct {
 }
 
 // Creates new peer struct
-func New(config *Config, mux *event.TypeMux) (*Peer, error) {
+func New(config *Config) (*Peer, error) {
 	host, err := newHost(config.port, config.privKey)
 	if err != nil {
 		log.Errorf("Cannot create host: %s", err)
@@ -109,13 +113,13 @@ func New(config *Config, mux *event.TypeMux) (*Peer, error) {
 	}
 
 	peer := &Peer{
-		host:     host,
-		context:  context.Background(),
-		respCh:   make(chan *pb.Message, 100),
-		quitCh:   make(chan struct{}),
-		timeout:  time.Second * 60,
-		handlers: make(map[string][]*Handler),
-		mux:      mux,
+		host:      host,
+		context:   context.Background(),
+		respCh:    make(chan *pb.Message, MaxRespBufSize),
+		quitCh:    make(chan struct{}),
+		timeout:   time.Second * 60,
+		protocols: make(map[string][]*Protocol),
+		mux:       event.GetEventhub(),
 	}
 	peer.routeTable = NewRouteTable(config, peer)
 
@@ -145,7 +149,7 @@ func (peer *Peer) Connect(pid peer.ID) error {
 }
 
 // Send message to a peer
-func (peer *Peer) Send(pid peer.ID, name string, data interface{}) error {
+func (peer *Peer) Send(pid peer.ID, typ string, data interface{}) error {
 	if pid == peer.ID() {
 		log.Info("Cannot send message to peer itself.")
 		return errors.New("Send message to self")
@@ -156,7 +160,7 @@ func (peer *Peer) Send(pid peer.ID, name string, data interface{}) error {
 	}
 	stream := NewStreamWithPid(pid, peer)
 	//peer.Streams.AddStream(stream)
-	return stream.send(name, data)
+	return stream.send(typ, data)
 }
 
 func (peer *Peer) Start() {
@@ -189,8 +193,8 @@ func (peer *Peer) ListenMsg() {
 			log.Infof("Receive message: Name:%s, data:%s \n", message.Name, message.Data)
 			// Handler run
 			peer.mu.RLock()
-			for _, handler := range peer.handlers[message.Name] {
-				go handler.Run(message)
+			for _, protocol := range peer.protocols[message.Name] {
+				go protocol.Run(message)
 			}
 			peer.mu.RUnlock()
 		}

@@ -54,8 +54,8 @@ type Header struct {
 	Coinbase     common.Address `json:"miner"`        // Miner address who receives reward of this block
 	Extra        []byte         `json:"extra"`        // Extra data
 	Time         *big.Int       `json:"time"`         // Timestamp
-	GasUsed      uint64      `json:"gas"`          // Total gas used
-	GasLimit     uint64       `json:"gas_limit"`    // Gas limit of this block
+	GasUsed      uint64         `json:"gas"`          // Total gas used
+	GasLimit     uint64         `json:"gas_limit"`    // Gas limit of this block
 }
 
 func (hd *Header) Hash() common.Hash {

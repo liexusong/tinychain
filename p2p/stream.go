@@ -100,7 +100,7 @@ func (s *Stream) start() {
 	go s.readLoop()
 }
 
-func (s *Stream) send(name string, data interface{}) error {
+func (s *Stream) send(typ string, data interface{}) error {
 	if s.stream == nil {
 		if err := s.connect(); err != nil {
 			return err
@@ -112,20 +112,20 @@ func (s *Stream) send(name string, data interface{}) error {
 	)
 	switch data.(type) {
 	case *pb.PeerData:
-		message, err = pb.NewPeerDataMsg(name, data.(*pb.PeerData))
+		message, err = pb.NewPeerDataMsg(typ, data.(*pb.PeerData))
 	case *pb.NormalData:
-		message, err = pb.NewNormalMsg(name, data.(*pb.NormalData))
+		message, err = pb.NewNormalMsg(typ, data.(*pb.NormalData))
 	default:
 		log.Error("Invalid data type of message")
 		return errors.New("Invalid data type of message")
 	}
 	if err != nil {
-		log.Infof("Failed to send message %s\n", name)
+		log.Infof("Failed to send message %s\n", typ)
 		return err
 	}
 
 	// Set deadline
-	s.SetReadDeadline(name)
+	s.SetReadDeadline(typ)
 
 	// Write data to stream
 	seri, _ := message.Serialize()

@@ -72,7 +72,7 @@ func (st *StateTransition) data() []byte {
 }
 
 func (st *StateTransition) gas() uint64 {
-	return st.tx.Gas
+	return st.tx.GasLimit
 }
 
 func (st *StateTransition) value() *big.Int {
@@ -105,8 +105,8 @@ func (st *StateTransition) Process() ([]byte, uint64, bool, error) {
 		}
 	}
 	gasUsed := st.gas() - leftGas
-	st.statedb.SubBalance(st.from().Address(), new(big.Int).SetUint64(gasUsed))
-	st.statedb.AddBalance(st.evm.Coinbase, new(big.Int).SetUint64(gasUsed))
+	//st.statedb.SubBalance(st.from().Address(), new(big.Int).SetUint64(gasUsed))
+	//st.statedb.AddBalance(st.evm.Coinbase, new(big.Int).SetUint64(gasUsed))
 
 	return ret, gasUsed, vmerr != nil, nil
 }

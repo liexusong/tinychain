@@ -11,35 +11,40 @@ import (
 	"tinychain/db/leveldb"
 )
 
+const (
+	MaxTxSize = 32 * 1024 // Maximum transaction size
+)
+
 type Transaction struct {
 	txData
 
 	txHash atomic.Value // hash cache
+	size   atomic.Value // size cache
 
 	Signature atomic.Value `json:"signature"` // Signature of tx
 }
 
 type txData struct {
-	Nonce   uint64         `json:"nonce"` // Account nonce, which is used to avoid double spending
-	Gas     uint64         `json:"gas"`   // Gas used
-	Value   *big.Int       `json:"value"` // Transferring value
-	From    common.Address `json:"from"`
-	To      common.Address `json:"to"` // Recipient of this tx, nil means contract creation
-	Payload []byte         `json:"payload"`
+	Nonce    uint64         `json:"nonce"`     // Account nonce, which is used to avoid double spending
+	GasLimit uint64         `json:"gas_limit"` // Gas limit of a tx
+	Value    *big.Int       `json:"value"`     // Transferring value
+	From     common.Address `json:"from"`
+	To       common.Address `json:"to"` // Recipient of this tx, nil means contract creation
+	Payload  []byte         `json:"payload"`
 }
 
-func NewTransaction(nonce uint64, gas uint64, value *big.Int, payload []byte, from, to common.Address) *Transaction {
-	return &Transaction{txData: NewTxData(nonce, gas, value, payload, from, to)}
+func NewTransaction(nonce, gasLimit uint64, value *big.Int, payload []byte, from, to common.Address) *Transaction {
+	return &Transaction{txData: NewTxData(nonce, gasLimit, value, payload, from, to)}
 }
 
-func NewTxData(nonce uint64, gas uint64, value *big.Int, payload []byte, from, to common.Address) txData {
+func NewTxData(nonce, gasLimit uint64, value *big.Int, payload []byte, from, to common.Address) txData {
 	return txData{
-		Nonce:   nonce,
-		Gas:     gas,
-		Value:   value,
-		Payload: payload,
-		From:    from,
-		To:      to,
+		Nonce:    nonce,
+		GasLimit: gasLimit,
+		Value:    value,
+		Payload:  payload,
+		From:     from,
+		To:       to,
 	}
 }
 
@@ -53,7 +58,7 @@ func (tx *Transaction) Hash() common.Hash {
 	if hash := tx.txHash.Load(); hash != nil {
 		return hash.(common.Hash)
 	}
-	txdata := NewTxData(tx.Nonce, tx.Gas, tx.Value, tx.Payload, tx.From, tx.To)
+	txdata := NewTxData(tx.Nonce, tx.GasLimit, tx.Value, tx.Payload, tx.From, tx.To)
 	data, _ := txdata.Serialize()
 	h := common.Sha256(data)
 	tx.txHash.Store(h)
@@ -88,6 +93,20 @@ func (tx *Transaction) Verify(pubKey crypto.PubKey) (bool, error) {
 	return equal, nil
 }
 
+func (tx *Transaction) Cost() *big.Int {
+	return new(big.Int).Add(tx.Value, new(big.Int).SetUint64(tx.GasLimit))
+}
+
+func (tx *Transaction) Size() uint32 {
+	if size := tx.size.Load(); size != nil {
+		return size.(uint32)
+	}
+	data, _ := tx.Serialize()
+	size := uint32(len(data))
+	tx.size.Store(size)
+	return size
+}
+
 type Transactions []*Transaction
 
 func (txs Transactions) Hash() common.Hash {
@@ -105,6 +124,20 @@ func (txs Transactions) Commit(db *leveldb.LDBDatabase) error {
 		txSet[tx.Hash().String()] = tx.Hash().Bytes()
 	}
 	return bmt.Commit(txSet, db)
+}
+
+type NonceSortedList Transactions
+
+func (txs NonceSortedList) Len() int {
+	return len(txs)
+}
+
+func (txs NonceSortedList) Less(i, j int) bool {
+	return txs[i].Nonce > txs[j].Nonce
+}
+
+func (txs NonceSortedList) Swap(i, j int) {
+	txs[i], txs[j] = txs[j], txs[i]
 }
 
 // TxMeta represents the meta data of a transaction,

@@ -10,9 +10,9 @@ var (
 	ErrDupHandler = errors.New("p2p handler duplicate")
 )
 
-type Handler struct {
-	// Name should match the message type
-	Name string
+type Protocol struct {
+	// Typ should match the message type
+	Typ string
 
 	// Run func handles the message from the stream
 	Run func(message *pb.Message) error
@@ -21,36 +21,36 @@ type Handler struct {
 	Error func(error)
 }
 
-func (h *Handler) String() string {
-	return fmt.Sprintf("P2P Handler %s", h.Name)
+func (h *Protocol) String() string {
+	return fmt.Sprintf("P2P Handler %s", h.Typ)
 }
 
-func (p *Peer) AddHandler(h *Handler) error {
+func (p *Peer) AddProtocol(h *Protocol) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if handlers, exist := p.handlers[h.Name]; exist {
+	if handlers, exist := p.protocols[h.Typ]; exist {
 		for _, handler := range handlers {
 			if handler == h {
 				return ErrDupHandler
 			}
 		}
-		p.handlers[h.Name] = append(handlers, h)
+		p.protocols[h.Typ] = append(handlers, h)
 	} else {
-		p.handlers[h.Name] = []*Handler{h}
+		p.protocols[h.Typ] = []*Protocol{h}
 	}
 	return nil
 }
 
-func (p *Peer) RemoveHandler(h *Handler) {
+func (p *Peer) DelProtocol(h *Protocol) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if handlers, exist := p.handlers[h.Name]; exist {
+	if handlers, exist := p.protocols[h.Typ]; exist {
 		for i, handler := range handlers {
 			if handler == h {
 				handlers = append(handlers[:i], handlers[i+1:]...)
 				break
 			}
 		}
-		p.handlers[h.Name] = handlers
+		p.protocols[h.Typ] = handlers
 	}
 }

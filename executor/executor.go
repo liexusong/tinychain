@@ -24,12 +24,12 @@ type ExecutorImpl struct {
 	txSub    event.Subscription
 }
 
-func New(chain *core.Blockchain, statedb *state.StateDB, mux *event.TypeMux) Executor {
+func New(chain *core.Blockchain, statedb *state.StateDB) Executor {
 	processor := core.NewStateProcessor(chain, statedb)
 	executor := &ExecutorImpl{
 		processor: processor,
 		chain:     chain,
-		event:     mux,
+		event:     event.GetEventhub(),
 		quitCh:    make(chan struct{}),
 		validator: NewValidator(processor),
 	}
@@ -37,8 +37,8 @@ func New(chain *core.Blockchain, statedb *state.StateDB, mux *event.TypeMux) Exe
 }
 
 func (ex *ExecutorImpl) Start() error {
-	ex.blockSub = ex.event.Subscribe(event.NewBlockEvent{})
-	ex.txSub = ex.event.Subscribe(event.NewTxEvent{})
+	ex.blockSub = ex.event.Subscribe(&event.NewBlockEvent{})
+	ex.txSub = ex.event.Subscribe(&event.NewTxEvent{})
 	go ex.listenBlock()
 	go ex.listenTx()
 }
@@ -47,7 +47,7 @@ func (ex *ExecutorImpl) listenBlock() {
 	for {
 		select {
 		case ev := <-ex.blockSub.Chan():
-			block := ev.(event.NewBlockEvent).Block
+			block := ev.(*event.NewBlockEvent).Block
 			err := ex.validator.ValidateHeader(block)
 			if err != nil {
 

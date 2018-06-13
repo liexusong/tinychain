@@ -29,9 +29,9 @@ type StateDB struct {
 	stateObjectsDirty map[common.Address]struct{}     // dirty state objects
 }
 
-func New(db *leveldb.LDBDatabase, root common.Hash) *StateDB {
+func New(db *leveldb.LDBDatabase, root []byte) *StateDB {
 	tree := bmt.NewBucketTree(db)
-	if err := tree.Init(root.Bytes()); err != nil {
+	if err := tree.Init(root); err != nil {
 		log.Errorf("Failed to init bucket tree when new state db, %s", err)
 		return nil
 	}

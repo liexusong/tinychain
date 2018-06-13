@@ -15,12 +15,6 @@ func NewValidator(processor core.Processor) *ValidateImpl {
 	}
 }
 
-// Validate transactions
-// 1.
-func (v *ValidateImpl) ValidateTx(tx *types.Transaction) error {
-
-}
-
 // Validate block header
 // 1. Validate timestamp
 // 2. Validate gasUsed and gasLimit

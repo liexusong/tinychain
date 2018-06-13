@@ -8,7 +8,10 @@ import (
 )
 
 // ErrMuxClosed is returned when Posting on a closed TypeMux.
-var ErrMuxClosed = errors.New("event: mux closed")
+var (
+	typeMux      *TypeMux
+	ErrMuxClosed = errors.New("event: mux closed")
+)
 
 // A TypeMux dispatches events to registered receivers. Receivers can be
 // registered to handle events of certain type. Any operation
@@ -19,7 +22,7 @@ type TypeMux struct {
 	stopped bool
 }
 
-func NewTypeMux() *TypeMux {
+func newTypeMux() *TypeMux {
 	return &TypeMux{
 		feeds: make(map[reflect.Type]*feed),
 	}
@@ -87,4 +90,11 @@ func (mux *TypeMux) Post(ev interface{}) error {
 		feed.send(ev)
 	}
 	return nil
+}
+
+func GetEventhub() *TypeMux {
+	if typeMux == nil {
+		typeMux = newTypeMux()
+	}
+	return typeMux
 }

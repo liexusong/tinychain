@@ -30,13 +30,13 @@ type Tinychain struct {
 
 	state *state.StateDB
 
-	network *p2p.Peer
+	network *Network
 
 	executor executor.Executor
 }
 
 func New(config *Config) (*Tinychain, error) {
-	eventHub := event.NewTypeMux()
+	eventHub := event.GetEventhub()
 
 	ldb, err := leveldb.NewLDBDataBase("tinychain")
 	if err != nil {
@@ -46,9 +46,9 @@ func New(config *Config) (*Tinychain, error) {
 	// Create tiny db
 	tinyDB := db.NewTinyDB(ldb)
 	// Create state db
-	statedb := state.New(ldb)
+	statedb := state.New(ldb, nil)
 
-	peer, err := p2p.New(&config.p2p, eventHub)
+	peer, err := p2p.New(config.p2p)
 	if err != nil {
 		log.Error("Failed to create p2p peer")
 		return nil, err
@@ -69,6 +69,7 @@ func New(config *Config) (*Tinychain, error) {
 		network:  peer,
 		chain:    bc,
 		engine:   engine,
+		state:    statedb,
 	}, nil
 }
 
