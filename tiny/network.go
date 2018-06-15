@@ -5,8 +5,15 @@ import (
 	"tinychain/event"
 )
 
+type Network interface {
+	Start() error
+	Stop() error
+	AddProtocol(p2p.Protocol) error
+	DelProtocol(p2p.Protocol)
+}
+
 // Network is the wrapper of physical p2p network layer
-type Network struct {
+type Peer struct {
 	config  *Config
 	network *p2p.Peer
 	event   *event.TypeMux
@@ -19,12 +26,12 @@ type Network struct {
 	quitCh chan struct{}
 }
 
-func NewNetwork(config *Config) *Network {
+func NewNetwork(config *Config) Network {
 	network, err := p2p.New(config.p2p)
 	if err != nil {
 		return nil
 	}
-	return &Network{
+	return &Peer{
 		config:  config,
 		network: network,
 		event:   event.GetEventhub(),
@@ -32,14 +39,14 @@ func NewNetwork(config *Config) *Network {
 	}
 }
 
-func (p *Network) Start() error {
+func (p *Peer) Start() error {
 	p.sendSub = p.event.Subscribe(&event.SendMsgEvent{})
 	p.protocolSub = p.event.Subscribe(&event.ProtocolEvent{})
 	go p.listen()
 	return nil
 }
 
-func (p *Network) listen() {
+func (p *Peer) listen() {
 	for {
 		select {
 		case ev := <-p.sendSub.Chan():
@@ -64,7 +71,15 @@ func (p *Network) listen() {
 	}
 }
 
-func (p *Network) Stop() error {
+func (p *Peer) Stop() error {
 	close(p.quitCh)
 	return nil
+}
+
+func (p *Peer) AddProtocol(proto p2p.Protocol) error {
+	return p.network.AddProtocol(proto)
+}
+
+func (p *Peer) DelProtocol(proto p2p.Protocol) {
+	p.network.DelProtocol(proto)
 }

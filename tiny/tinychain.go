@@ -30,7 +30,7 @@ type Tinychain struct {
 
 	state *state.StateDB
 
-	network *Network
+	network Network
 
 	executor executor.Executor
 }

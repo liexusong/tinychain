@@ -24,7 +24,7 @@ type BucketTree interface {
 
 type StateDB struct {
 	db                *cacheDB
-	bmt               BucketTree                      // bucket merkel tree of global state
+	bmt               BucketTree                      // bucket merkle tree of global state
 	stateObjects      map[common.Address]*stateObject // live state objects
 	stateObjectsDirty map[common.Address]struct{}     // dirty state objects
 }

@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"tinychain/p2p/pb"
-	"fmt"
 	"errors"
 )
 
@@ -10,47 +9,63 @@ var (
 	ErrDupHandler = errors.New("p2p handler duplicate")
 )
 
-type Protocol struct {
+// Protocol represents the callback handler
+type Protocol interface {
 	// Typ should match the message type
-	Typ string
+	Type() string
 
 	// Run func handles the message from the stream
-	Run func(message *pb.Message) error
+	Run(message *pb.Message) error
 
 	// Error func handles the error returned from the stream
-	Error func(error)
+	Error(error)
 }
 
-func (h *Protocol) String() string {
-	return fmt.Sprintf("P2P Handler %s", h.Typ)
-}
+//// Handler implements protocol
+//type Handler struct {
+//	// Typ should match the message type
+//	typ string
+//
+//	// Run func handles the message from the stream
+//	run func(message *pb.Message) error
+//
+//	// Error func handles the error returned from the stream
+//	error func(error)
+//}
+//
+//func (h *Handler) String() string {
+//	return fmt.Sprintf("P2P Handler %s", h.Type())
+//}
+//
+//func (h *Handler) Type() string {
+//	return h.typ
+//}
 
-func (p *Peer) AddProtocol(h *Protocol) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if handlers, exist := p.protocols[h.Typ]; exist {
-		for _, handler := range handlers {
-			if handler == h {
+func (p *Peer) AddProtocol(proto Protocol) error {
+	if protocols, exist := p.protocols.Load(proto.Type()); exist {
+		protocols := protocols.([]Protocol)
+		for _, protocol := range protocols {
+			if protocol == proto {
 				return ErrDupHandler
 			}
 		}
-		p.protocols[h.Typ] = append(handlers, h)
+		protocols = append(protocols, proto)
+		p.protocols.Store(proto.Type(), protocols)
 	} else {
-		p.protocols[h.Typ] = []*Protocol{h}
+		p.protocols.Store(proto.Type(), []Protocol{proto})
 	}
 	return nil
 }
 
-func (p *Peer) DelProtocol(h *Protocol) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if handlers, exist := p.protocols[h.Typ]; exist {
-		for i, handler := range handlers {
-			if handler == h {
-				handlers = append(handlers[:i], handlers[i+1:]...)
+func (p *Peer) DelProtocol(proto Protocol) {
+	if protocols, exist := p.protocols.Load(proto.Type()); exist {
+		protocols := protocols.([]Protocol)
+		for i, protocol := range protocols {
+			if protocol == proto {
+				protocols = append(protocols[:i], protocols[i+1:]...)
 				break
 			}
 		}
-		p.protocols[h.Typ] = handlers
+		p.protocols.Store(proto.Type(), protocols)
 	}
 }

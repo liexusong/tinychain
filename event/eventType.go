@@ -19,7 +19,7 @@ type BlockBroadcastEvent struct{}
 	Transaction events
  */
 type NewTxEvent struct {
-	Tx types.Transaction
+	Tx *types.Transaction
 }
 
 type NewTxsEvent struct {
@@ -45,5 +45,5 @@ type SendMsgEvent struct {
 // Protocol manage event
 type ProtocolEvent struct {
 	Typ      string // 'add' or 'del'
-	Protocol *p2p.Protocol
+	Protocol p2p.Protocol
 }

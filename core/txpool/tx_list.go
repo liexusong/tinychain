@@ -25,8 +25,9 @@ func (list *txList) Get(nonce uint64) *types.Transaction {
 func (list *txList) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transaction) {
 	var old *types.Transaction
 	if old = list.Get(tx.Nonce); tx != nil {
-		boundGas := old.Gas * (100 + priceBump) / 100
-		if boundGas < tx.Gas {
+		// Replacement strategy. Temporary design
+		boundGas := old.GasLimit * (100 + priceBump) / 100
+		if boundGas < tx.GasLimit {
 			return false, nil
 		}
 	}
@@ -70,9 +71,46 @@ func (list *txList) All() types.Transactions {
 	return results
 }
 
-// Filter removes all transactions from the list with a cost or gas limit
-// higher than the provided thresholds.
-// Every removed transaction is returned as the second return value.
-func (list *txList) Filter() (types.Transactions, types.Transactions) {
+// Filter filters all transactions which make filter func true and false, and
+// removes unmatching transactions from the list
+func (list *txList) Filter(filter func(tx *types.Transaction) bool) (types.Transactions, types.Transactions) {
+	var (
+		match   types.Transactions
+		unmatch types.Transactions
+	)
+	list.txs.Range(func(key, value interface{}) bool {
+		tx := value.(*types.Transaction)
+		if filter(tx) {
+			match = append(match, tx)
+		} else {
+			unmatch = append(unmatch, tx)
+		}
+		return true
+	})
 
+	for _, tx := range unmatch {
+		list.txs.Delete(tx.Nonce)
+	}
+
+	list.cache = nil
+	return match, unmatch
+}
+
+// Ready retrieves a sequentially increasing list of transactions starting at the
+// provided nonce that is ready for processing. The returned transactions will be
+// removed from the list.
+func (list *txList) Ready(start uint64) types.Transactions {
+	var (
+		results types.Transactions
+		nonce   = start
+	)
+	for {
+		if tx, exist := list.txs.Load(nonce); exist {
+			results = append(results, tx.(*types.Transaction))
+		} else {
+			break
+		}
+	}
+	list.cache = nil
+	return results
 }

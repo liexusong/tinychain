@@ -13,6 +13,7 @@ type Validator interface {
 
 type TxValidator interface {
 	ValidateTxs(txs types.Transactions) (types.Transactions, types.Transactions)
+	ValidateTx(tx *types.Transaction) error
 }
 
 type StateValidator interface {

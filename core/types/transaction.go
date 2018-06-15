@@ -15,13 +15,20 @@ const (
 	MaxTxSize = 32 * 1024 // Maximum transaction size
 )
 
+var (
+	ErrSignNotFound    = errors.New("signature not found")
+	ErrPubkeyNotFound  = errors.New("public key not found")
+	ErrAddressNotMatch = errors.New("address not match")
+)
+
 type Transaction struct {
 	txData
 
 	txHash atomic.Value // hash cache
 	size   atomic.Value // size cache
 
-	Signature atomic.Value `json:"signature"` // Signature of tx
+	PubKey    []byte `json:"pub_key"`   // Public key
+	Signature []byte `json:"signature"` // Signature of tx
 }
 
 type txData struct {
@@ -67,28 +74,48 @@ func (tx *Transaction) Hash() common.Hash {
 
 // Sign the transaction with private key
 func (tx *Transaction) Sign(privKey crypto.PrivKey) ([]byte, error) {
-	if sign := tx.Signature.Load(); sign != nil {
-		return sign.([]byte), nil
+	if sign := tx.Signature; sign != nil {
+		return sign, nil
 	}
 	hash := tx.Hash()
 	s, err := privKey.Sign(hash[:])
 	if err != nil {
 		return nil, err
 	}
-	tx.Signature.Store(s)
+	tx.Signature = s
+	tx.PubKey, err = privKey.GetPublic().Bytes()
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
 // Verify transaction signature by specific public key
-func (tx *Transaction) Verify(pubKey crypto.PubKey) (bool, error) {
-	sign := tx.Signature.Load()
-	if sign != nil {
-		return false, errors.New("signature not found")
+func (tx *Transaction) Verify() (bool, error) {
+	if tx.Signature == nil {
+		return false, ErrSignNotFound
 	}
-	hash := tx.Hash()
-	equal, err := pubKey.Verify(hash[:], sign.([]byte))
+	if tx.PubKey == nil {
+		return false, ErrPubkeyNotFound
+	}
+	pubKey, err := crypto.UnmarshalPublicKey(tx.PubKey)
 	if err != nil {
-		return false, errors.New("error occur during sign verification")
+		return false, err
+	}
+	// Verify address
+	address, err := common.GenAddrByPubkey(pubKey)
+	if err != nil {
+		return false, err
+	}
+	if address != tx.From {
+		return false, ErrAddressNotMatch
+	}
+
+	// Verify tx hash
+	hash := tx.Hash()
+	equal, err := pubKey.Verify(hash[:], tx.Signature)
+	if err != nil {
+		return false, err
 	}
 	return equal, nil
 }
@@ -133,7 +160,7 @@ func (txs NonceSortedList) Len() int {
 }
 
 func (txs NonceSortedList) Less(i, j int) bool {
-	return txs[i].Nonce > txs[j].Nonce
+	return txs[i].Nonce < txs[j].Nonce
 }
 
 func (txs NonceSortedList) Swap(i, j int) {

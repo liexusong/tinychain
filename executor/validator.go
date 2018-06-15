@@ -33,22 +33,7 @@ func (v *ValidateImpl) ValidateBody(block *types.Block) error {
 // Validate block state and receipts
 // 1. Simulate process every transaction
 // 2. Validate the result receipt is match or not
+// 3.
 func (v *ValidateImpl) Process(txs types.Transactions, receipts types.Receipts) error {
-
-}
-
-func (v *ValidateImpl) ValidTxs() types.Transactions {
-
-}
-
-func (v *ValidateImpl) InvalidTxs() types.Transactions {
-
-}
-
-func (v *ValidateImpl) ValidReceipts() types.Receipts {
-
-}
-
-func (v *ValidateImpl) InvalidReceipts() types.Receipts {
 
 }

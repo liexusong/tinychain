@@ -94,14 +94,10 @@ type Peer struct {
 	routeTable *RouteTable      // Local route table
 	context    context.Context
 	respCh     chan *pb.Message // Response channel. Receive message from stream.
-	quitCh     chan struct{}
-
-	mu        sync.RWMutex
-	protocols map[string][]*Protocol // Handlers of upper layer
-
-	timeout time.Duration // Timeout of per connection
-
-	mux *event.TypeMux
+	quitCh     chan struct{}    // quit channel
+	protocols  sync.Map         // Handlers of upper layer. map[string][]*Protocol
+	timeout    time.Duration    // Timeout of per connection
+	mux        *event.TypeMux
 }
 
 // Creates new peer struct
@@ -113,13 +109,12 @@ func New(config *Config) (*Peer, error) {
 	}
 
 	peer := &Peer{
-		host:      host,
-		context:   context.Background(),
-		respCh:    make(chan *pb.Message, MaxRespBufSize),
-		quitCh:    make(chan struct{}),
-		timeout:   time.Second * 60,
-		protocols: make(map[string][]*Protocol),
-		mux:       event.GetEventhub(),
+		host:    host,
+		context: context.Background(),
+		respCh:  make(chan *pb.Message, MaxRespBufSize),
+		quitCh:  make(chan struct{}),
+		timeout: time.Second * 60,
+		mux:     event.GetEventhub(),
 	}
 	peer.routeTable = NewRouteTable(config, peer)
 
@@ -192,11 +187,11 @@ func (peer *Peer) ListenMsg() {
 		case message := <-peer.respCh:
 			log.Infof("Receive message: Name:%s, data:%s \n", message.Name, message.Data)
 			// Handler run
-			peer.mu.RLock()
-			for _, protocol := range peer.protocols[message.Name] {
-				go protocol.Run(message)
+			if protocols, exist := peer.protocols.Load(message.Name); exist {
+				for _, proto := range protocols.([]Protocol) {
+					go proto.Run(message)
+				}
 			}
-			peer.mu.RUnlock()
 		}
 	}
 }
