@@ -14,7 +14,7 @@ type Network interface {
 
 // Network is the wrapper of physical p2p network layer
 type Peer struct {
-	config  *Config
+	config  *p2p.Config
 	network *p2p.Peer
 	event   *event.TypeMux
 
@@ -26,9 +26,10 @@ type Peer struct {
 	quitCh chan struct{}
 }
 
-func NewNetwork(config *Config) Network {
-	network, err := p2p.New(config.p2p)
+func NewNetwork(config *p2p.Config) Network {
+	network, err := p2p.New(config)
 	if err != nil {
+		log.Error("Failed to create p2p peer")
 		return nil
 	}
 	return &Peer{

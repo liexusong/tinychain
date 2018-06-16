@@ -7,18 +7,25 @@ import (
 	"tinychain/event"
 	"sync"
 	"tinychain/core/state"
+	"errors"
 )
 
 var (
 	log            = common.GetLogger("txpool")
 	txPool *TxPool = nil
+
+	ErrTxDuplicate = errors.New("transaction duplicate")
+	ErrPoolFull    = errors.New("tx_pool is full")
+	ErrTxDiscard   = errors.New("old transaction is better, discard the new one")
 )
 
 type TxPool struct {
-	currentState *state.StateDB
-	eventHub    *event.TypeMux
-	txValidator executor.TxValidator
-	quitCh      chan struct{}
+	config       *Config              // Txpool config
+	currentState *state.StateDB       // Current state
+	txValidator  executor.TxValidator // Tx validator wrapper
+	all          *txLookup            // Cache all tx hash to accelerate searching
+	eventHub     *event.TypeMux
+	quitCh       chan struct{}
 
 	// all valid and processable txs.
 	// map[common.Address]*txList
@@ -31,10 +38,12 @@ type TxPool struct {
 	newTxSub event.Subscription
 }
 
-func NewTxPool(validator executor.TxValidator) *TxPool {
+func NewTxPool(config *Config, validator executor.TxValidator) *TxPool {
 	return &TxPool{
+		config:      config,
 		txValidator: validator,
 		eventHub:    event.GetEventhub(),
+		all:         newTxLookup(),
 	}
 }
 
@@ -73,14 +82,85 @@ func (tp *TxPool) Add(tx *types.Transaction) error {
 }
 
 func (tp *TxPool) add(tx *types.Transaction) error {
-	// check promote
+	// Validate tx
+	if err := tp.validateTx(tx); err != nil {
+		log.Errorf("Validate tx failed, %s", err)
+		return err
+	}
+
+	// check txpool queue is full or not
+	if tp.all.Len() >= tp.config.MaxTxSize {
+		log.Warning(ErrPoolFull.Error())
+		return ErrPoolFull
+	}
+
+	// Check whether to replace a pending tx
+	replace, old := tp.replacePending(tx)
+	if replace {
+		log.Errorf("replace an old pending tx %s", old.Hash())
+		return nil
+	}
+
+	// Add queue
+	err := tp.addQueue(tx)
+	if err != nil {
+		return err
+	}
+
+	// Check processable
+	return tp.activate()
 }
 
-func (tp *TxPool) addQueue(tx *types.Transaction) {
+func (tp *TxPool) checkProcessable() {
 
 }
 
-func (tp *TxPool) addPending(tx *types.Transaction) {
+func (tp *TxPool) addQueue(tx *types.Transaction) error {
+	list, exist := tp.queue.Load(tx.From)
+	if !exist {
+		tl := newTxList()
+		tl.Add(tx, tp.config.PriceBump)
+		tp.queue.Store(tx.From, tl)
+		return nil
+	}
+	tl := list.(*txList)
+	inserted, _ := tl.Add(tx, tp.config.PriceBump)
+	if !inserted {
+		return ErrTxDiscard
+	}
+
+	// Check tx is existed in pool or not
+	if !tp.all.Get(tx.Hash()) {
+		tp.all.Add(tx.Hash())
+	}
+
+	return nil
+}
+
+// replacePending check whether to replace tx in pending list,
+// and if yes, return true
+func (tp *TxPool) replacePending(tx *types.Transaction) (bool, *types.Transaction) {
+	list, exist := tp.pending.Load(tx.From)
+	if !exist {
+		return false, nil
+	}
+	tl := list.(*txList)
+	canReplace, old := tl.CanInsert(tx, tp.config.PriceBump)
+	if canReplace {
+		tl.Put(tx)
+	}
+
+	return canReplace, old
+}
+
+// activate moves transaction that have become processable from
+// the queue to the pending list. During this process, all
+// invalid transactions (low nonce, low balance) are deleted.
+//
+// 1. drop all low-nonce transaction
+// 2. drop all costly transaction
+// 3. Get sequentially increasing list and activate them
+func (tp *TxPool) activate() error {
 
 }
 

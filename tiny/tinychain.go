@@ -5,7 +5,6 @@ import (
 	"tinychain/consensus"
 	"tinychain/core"
 	"tinychain/db"
-	"tinychain/p2p"
 	"tinychain/common"
 	"tinychain/executor"
 	"tinychain/db/leveldb"
@@ -48,12 +47,7 @@ func New(config *Config) (*Tinychain, error) {
 	// Create state db
 	statedb := state.New(ldb, nil)
 
-	peer, err := p2p.New(config.p2p)
-	if err != nil {
-		log.Error("Failed to create p2p peer")
-		return nil, err
-	}
-
+	peer := NewNetwork(config.p2p)
 	engine := consensus.New()
 
 	bc, err := core.NewBlockchain(tinyDB, engine)

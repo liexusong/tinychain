@@ -4,11 +4,16 @@ import (
 	"tinychain/core/types"
 	"sync"
 	"sort"
+	"math/big"
 )
 
 type txList struct {
 	txs   sync.Map
 	cache types.Transactions
+}
+
+func newTxList() *txList {
+	return &txList{}
 }
 
 func (list *txList) Get(nonce uint64) *types.Transaction {
@@ -18,21 +23,33 @@ func (list *txList) Get(nonce uint64) *types.Transaction {
 	return nil
 }
 
-// Add adds a new transaction to the list,returning whether the
+// Add adds a new transaction to the list, returning whether the
 // transaction was accepted, and if yes, any previous transaction it replaced.
 //
-// PriceBump is the percent
-func (list *txList) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transaction) {
+// PriceBump is the percent number
+func (list *txList) Add(tx *types.Transaction, priceBump int) (bool, *types.Transaction) {
+	canInsert, old := list.CanInsert(tx, priceBump)
+	if !canInsert {
+		return false, nil
+	}
+	list.Put(tx)
+	return true, old
+}
+
+func (list *txList) Put(tx *types.Transaction) {
+	list.txs.Store(tx.Nonce, tx)
+	list.cache = nil
+}
+
+func (list *txList) CanInsert(tx *types.Transaction, priceBump int) (bool, *types.Transaction) {
 	var old *types.Transaction
-	if old = list.Get(tx.Nonce); tx != nil {
+	if old := list.Get(tx.Nonce); old != nil {
 		// Replacement strategy. Temporary design
-		boundGas := old.GasLimit * (100 + priceBump) / 100
-		if boundGas < tx.GasLimit {
+		boundGas := old.GasLimit * uint64(100+priceBump) / 100
+		if boundGas > tx.GasLimit {
 			return false, nil
 		}
 	}
-	list.txs.Store(tx.Nonce, tx)
-	list.cache = nil
 	return true, old
 }
 
@@ -45,8 +62,8 @@ func (list *txList) Del(nonce uint64) {
 	list.cache = nil
 }
 
-func (list *txList) Len() int {
-	var length int
+func (list *txList) Len() uint64 {
+	var length uint64
 	list.txs.Range(func(key, value interface{}) bool {
 		length++
 		return true
@@ -73,7 +90,7 @@ func (list *txList) All() types.Transactions {
 
 // Filter filters all transactions which make filter func true and false, and
 // removes unmatching transactions from the list
-func (list *txList) Filter(filter func(tx *types.Transaction) bool) (types.Transactions, types.Transactions) {
+func (list *txList) filter(filter func(tx *types.Transaction) bool) (types.Transactions, types.Transactions) {
 	var (
 		match   types.Transactions
 		unmatch types.Transactions
@@ -107,10 +124,32 @@ func (list *txList) Ready(start uint64) types.Transactions {
 	for {
 		if tx, exist := list.txs.Load(nonce); exist {
 			results = append(results, tx.(*types.Transaction))
+			nonce++
 		} else {
 			break
 		}
 	}
+	for _, tx := range results {
+		list.txs.Delete(tx.Nonce)
+	}
 	list.cache = nil
 	return results
+}
+
+// Forget drops all transactions whose nonce is lower than bound.
+// Every removed transaction is returned.
+func (list *txList) Forget(bound uint64) types.Transactions {
+	_, drops := list.filter(func(tx *types.Transaction) bool {
+		return tx.Nonce >= bound
+	})
+	return drops
+}
+
+// Release drops all transactions whose cost is over balance.
+// Every removed transaction is returned.
+func (list *txList) Release(balance *big.Int) types.Transactions {
+	_, drops := list.filter(func(tx *types.Transaction) bool {
+		return tx.Cost().Cmp(balance) <= 0
+	})
+	return drops
 }
