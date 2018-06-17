@@ -1,77 +1,55 @@
 package tiny
 
 import (
-	"tinychain/common"
-	"tinychain/core/types"
 	"tinychain/event"
 	"tinychain/p2p"
+	"sync"
 )
-
-type TxPool interface {
-	// AddRemotes adds remote transactions to queue tx list
-	AddRemotes(txs types.Transactions) error
-
-	// Pending returns all valid and processable transactions
-	Pending() map[common.Address]types.Transactions
-
-}
 
 // ProtocolManager manages the subProtocols of p2p layer, and collects
 // txs from remote peers
 type ProtocolManager struct {
+	mu           sync.RWMutex
 	subProtocols []p2p.Protocol
-
-	net Network
-
-	eventHub *event.TypeMux
-
-	protocolSub event.Subscription
-
-	quitCh chan struct{}
+	net          Network
+	eventHub     *event.TypeMux
 }
 
 func NewProtocolManager(net Network) *ProtocolManager {
 	return &ProtocolManager{
-		net:      net,
-		eventHub: event.GetEventhub(),
-		quitCh:   make(chan struct{}),
+		net: net,
 	}
 }
 
-func (pm *ProtocolManager) Start() {
-	pm.protocolSub = pm.eventHub.Subscribe()
-	go pm.listen()
-}
-
-func (pm *ProtocolManager) listen() {
-	for {
-		select {
-		case ev := <-pm.protocolSub.Chan():
-			protoEv := ev.(*event.ProtocolEvent)
-			if protoEv.Typ == "add" {
-				pm.addProtocol(protoEv.Protocol)
-			} else {
-				pm.delProtocol(protoEv.Protocol)
-			}
-		case <-pm.quitCh:
-			pm.protocolSub.Unsubscribe()
-			break
+func (pm *ProtocolManager) Init(protocols []p2p.Protocol) error {
+	for _, protocol := range protocols {
+		err := pm.AddProtocol(protocol)
+		if err != nil {
+			log.Errorf("faild to register protocol %s", protocol.Type())
+			return nil
 		}
 	}
-}
-
-func (pm *ProtocolManager) Stop() {
-	close(pm.quitCh)
+	return nil
 }
 
 func (pm *ProtocolManager) Protocols() []p2p.Protocol {
 	return pm.subProtocols
 }
 
-func (pm *ProtocolManager) addProtocol(proto p2p.Protocol) error {
-	return pm.net.AddProtocol(proto)
+func (pm *ProtocolManager) AddProtocol(proto p2p.Protocol) error {
+	err := pm.net.AddProtocol(proto)
+	if err != nil {
+		return err
+	}
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.subProtocols = append(pm.subProtocols, proto)
+	return nil
 }
 
-func (pm *ProtocolManager) delProtocol(proto p2p.Protocol) {
+func (pm *ProtocolManager) DelProtocol(proto p2p.Protocol) {
 	pm.net.DelProtocol(proto)
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
 }

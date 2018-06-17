@@ -17,9 +17,7 @@ type TxValidator interface {
 }
 
 type StateValidator interface {
-	Process(tx types.Transactions, receipts types.Receipts) error
-	ValidReceipts() types.Receipts
-	InvalidReceipts() types.Receipts
+	Process(tx types.Transactions, receipts types.Receipts) (valid types.Receipts, invalid types.Receipts)
 }
 
 type BlockValidator interface {

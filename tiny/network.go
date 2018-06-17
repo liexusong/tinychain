@@ -20,8 +20,6 @@ type Peer struct {
 
 	// Send message event subscription
 	sendSub event.Subscription
-	// Add and delete protocol event subscription
-	protocolSub event.Subscription
 
 	quitCh chan struct{}
 }
@@ -41,8 +39,7 @@ func NewNetwork(config *p2p.Config) Network {
 }
 
 func (p *Peer) Start() error {
-	p.sendSub = p.event.Subscribe(&event.SendMsgEvent{})
-	p.protocolSub = p.event.Subscribe(&event.ProtocolEvent{})
+	p.sendSub = p.event.Subscribe(&p2p.SendMsgEvent{})
 	go p.listen()
 	return nil
 }
@@ -51,23 +48,13 @@ func (p *Peer) listen() {
 	for {
 		select {
 		case ev := <-p.sendSub.Chan():
-			msg := ev.(*event.SendMsgEvent)
+			msg := ev.(*p2p.SendMsgEvent)
 			err := p.network.Send(msg.Target, msg.Typ, msg.Data)
 			if err != nil {
 				log.Errorf("Failed to send message to %s with type %s", msg.Target, msg.Typ)
 			}
-		case ev := <-p.protocolSub.Chan():
-			action := ev.(*event.ProtocolEvent)
-			if action.Typ == "add" {
-				p.network.AddProtocol(action.Protocol)
-			} else if action.Typ == "del" {
-				p.network.DelProtocol(action.Protocol)
-			} else {
-				log.Errorf("Unknown protocol action type %s", action.Typ)
-			}
 		case p.quitCh:
 			p.sendSub.Unsubscribe()
-			p.protocolSub.Unsubscribe()
 		}
 	}
 }

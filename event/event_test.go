@@ -34,7 +34,7 @@ func TestSubCloseUnsub(t *testing.T) {
 }
 
 func TestSub(t *testing.T) {
-	mux := NewTypeMux()
+	mux := newTypeMux()
 	defer mux.Stop()
 
 	sub := mux.Subscribe(testEvent(0))
@@ -50,7 +50,7 @@ func TestSub(t *testing.T) {
 }
 
 func TestMuxErrorAfterStop(t *testing.T) {
-	mux := NewTypeMux()
+	mux := newTypeMux()
 	mux.Stop()
 
 	sub := mux.Subscribe(testEvent(0))
@@ -61,7 +61,7 @@ func TestMuxErrorAfterStop(t *testing.T) {
 }
 
 func TestUnsubscribeUnblockPost(t *testing.T) {
-	mux := NewTypeMux()
+	mux := newTypeMux()
 	defer mux.Stop()
 
 	sub := mux.Subscribe(testEvent(0))
@@ -81,7 +81,7 @@ func TestUnsubscribeUnblockPost(t *testing.T) {
 }
 
 func TestSubscribeDuplicateType(t *testing.T) {
-	mux := NewTypeMux()
+	mux := newTypeMux()
 	expected := "event: duplicate type event.testEvent in Subscribe"
 
 	defer func() {
@@ -97,7 +97,7 @@ func TestSubscribeDuplicateType(t *testing.T) {
 
 func TestMuxConcurrent(t *testing.T) {
 	rand.Seed(time.Now().Unix())
-	mux := NewTypeMux()
+	mux := newTypeMux()
 	defer mux.Stop()
 
 	recv := make(chan int)
@@ -148,7 +148,7 @@ func emptySubscriber(mux *TypeMux, types ...interface{}) {
 
 func BenchmarkPost1000(b *testing.B) {
 	var (
-		mux              = NewTypeMux()
+		mux              = newTypeMux()
 		subscribed, done sync.WaitGroup
 		nsubs            = 1000
 	)
@@ -177,7 +177,7 @@ func BenchmarkPost1000(b *testing.B) {
 }
 
 func BenchmarkPostConcurrent(b *testing.B) {
-	var mux = NewTypeMux()
+	var mux = newTypeMux()
 	defer mux.Stop()
 	emptySubscriber(mux, testEvent(0))
 	emptySubscriber(mux, testEvent(0))

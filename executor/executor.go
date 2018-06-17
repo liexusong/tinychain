@@ -20,8 +20,8 @@ type ExecutorImpl struct {
 	event     *event.TypeMux
 	quitCh    chan struct{}
 
-	blockSub event.Subscription
-	txSub    event.Subscription
+	blockSub event.Subscription // Subscribe new block event
+	txsSub   event.Subscription // Subscribe new transactions event
 }
 
 func New(chain *core.Blockchain, statedb *state.StateDB) Executor {
@@ -37,8 +37,8 @@ func New(chain *core.Blockchain, statedb *state.StateDB) Executor {
 }
 
 func (ex *ExecutorImpl) Start() error {
-	ex.blockSub = ex.event.Subscribe(&event.NewBlockEvent{})
-	ex.txSub = ex.event.Subscribe(&event.NewTxEvent{})
+	ex.blockSub = ex.event.Subscribe(&core.NewBlockEvent{})
+	ex.txsSub = ex.event.Subscribe(&core.NewTxsEvent{})
 	go ex.listenBlock()
 	go ex.listenTx()
 }
@@ -47,13 +47,15 @@ func (ex *ExecutorImpl) listenBlock() {
 	for {
 		select {
 		case ev := <-ex.blockSub.Chan():
-			block := ev.(*event.NewBlockEvent).Block
+			block := ev.(*core.NewBlockEvent).Block
 			err := ex.validator.ValidateHeader(block)
 			if err != nil {
 
 			}
 
 			err = ex.validator.ValidateBody(block)
+		case ev := <-ex.txsSub.Chan():
+			txs := ev.(*core.NewTxsEvent).Txs
 		case <-ex.quitCh:
 			ex.blockSub.Unsubscribe()
 		}
@@ -63,8 +65,8 @@ func (ex *ExecutorImpl) listenBlock() {
 func (ex *ExecutorImpl) listenTx() {
 	for {
 		select {
-		case ev := <-ex.txSub.Chan():
-			tx := ev.(event.NewTxEvent).Tx
+		case ev := <-ex.txsSub.Chan():
+			tx := ev.(core.NewTxEvent).Tx
 			// TODO validate transaction
 		case <-ex.quitCh:
 			ex.txSub.Unsubscribe()

@@ -32,6 +32,8 @@ type Tinychain struct {
 	network Network
 
 	executor executor.Executor
+
+	pm *ProtocolManager
 }
 
 func New(config *Config) (*Tinychain, error) {
@@ -47,7 +49,7 @@ func New(config *Config) (*Tinychain, error) {
 	// Create state db
 	statedb := state.New(ldb, nil)
 
-	peer := NewNetwork(config.p2p)
+	network := NewNetwork(config.p2p)
 	engine := consensus.New()
 
 	bc, err := core.NewBlockchain(tinyDB, engine)
@@ -60,13 +62,23 @@ func New(config *Config) (*Tinychain, error) {
 		config:   config,
 		eventHub: eventHub,
 		db:       tinyDB,
-		network:  peer,
+		network:  network,
 		chain:    bc,
 		engine:   engine,
 		state:    statedb,
+		pm:       NewProtocolManager(network),
 	}, nil
 }
 
-func (self *Tinychain) Init() {
+func (chain *Tinychain) Start() {
+	// Collect protocols and register in the protocol manager
+
+	// start network
+	err := chain.network.Start()
+}
+
+func (chain *Tinychain) Stop() {
+	chain.eventHub.Stop()
+	chain.network.Stop()
 
 }

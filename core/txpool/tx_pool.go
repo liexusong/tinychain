@@ -8,6 +8,7 @@ import (
 	"sync"
 	"tinychain/core/state"
 	"errors"
+	"tinychain/core"
 )
 
 var (
@@ -48,14 +49,14 @@ func NewTxPool(config *Config, validator executor.TxValidator) *TxPool {
 }
 
 func (tp *TxPool) Start() {
-	tp.newTxSub = tp.eventHub.Subscribe(&event.NewTxEvent{})
+	tp.newTxSub = tp.eventHub.Subscribe(&core.NewTxEvent{})
 }
 
 func (tp *TxPool) listen() {
 	for {
 		select {
 		case ev := <-tp.newTxSub.Chan():
-			tp.Add(ev.(*event.NewTxEvent).Tx)
+			tp.Add(ev.(*core.NewTxEvent).Tx)
 		case <-tp.quitCh:
 			tp.newTxSub.Unsubscribe()
 			break
@@ -74,11 +75,21 @@ func (tp *TxPool) Pending() map[common.Address]types.Transactions {
 }
 
 func (tp *TxPool) Add(tx *types.Transaction) error {
-	if err := tp.validateTx(tx); err != nil {
-		log.Errorf("failed to validate tx, %s", err)
-		return err
-	}
 	return tp.add(tx)
+}
+
+func (tp *TxPool) getQueue(addr common.Address) *txList {
+	if tl, exist := tp.queue.Load(addr); exist {
+		return tl.(*txList)
+	}
+	return nil
+}
+
+func (tp *TxPool) getPending(addr common.Address) *txList {
+	if tl, exist := tp.pending.Load(addr); exist {
+		return tl.(*txList)
+	}
+	return nil
 }
 
 func (tp *TxPool) add(tx *types.Transaction) error {
@@ -108,22 +119,18 @@ func (tp *TxPool) add(tx *types.Transaction) error {
 	}
 
 	// Check processable
-	return tp.activate()
-}
-
-func (tp *TxPool) checkProcessable() {
-
+	tp.activate([]common.Address{tx.From})
+	return nil
 }
 
 func (tp *TxPool) addQueue(tx *types.Transaction) error {
-	list, exist := tp.queue.Load(tx.From)
-	if !exist {
+	tl := tp.getQueue(tx.From)
+	if tl == nil {
 		tl := newTxList()
 		tl.Add(tx, tp.config.PriceBump)
 		tp.queue.Store(tx.From, tl)
 		return nil
 	}
-	tl := list.(*txList)
 	inserted, _ := tl.Add(tx, tp.config.PriceBump)
 	if !inserted {
 		return ErrTxDiscard
@@ -140,28 +147,72 @@ func (tp *TxPool) addQueue(tx *types.Transaction) error {
 // replacePending check whether to replace tx in pending list,
 // and if yes, return true
 func (tp *TxPool) replacePending(tx *types.Transaction) (bool, *types.Transaction) {
-	list, exist := tp.pending.Load(tx.From)
-	if !exist {
+	tl := tp.getPending(tx.From)
+	if tl == nil {
 		return false, nil
 	}
-	tl := list.(*txList)
 	canReplace, old := tl.CanInsert(tx, tp.config.PriceBump)
-	if canReplace {
+	if canReplace && old != nil {
 		tl.Put(tx)
 	}
 
-	return canReplace, old
+	return canReplace && old != nil, old
 }
 
 // activate moves transaction that have become processable from
 // the queue to the pending list. During this process, all
 // invalid transactions (low nonce, low balance) are deleted.
-//
-// 1. drop all low-nonce transaction
-// 2. drop all costly transaction
-// 3. Get sequentially increasing list and activate them
-func (tp *TxPool) activate() error {
+func (tp *TxPool) activate(addrs []common.Address) {
+	var activeTxs types.Transactions
+	for _, addr := range addrs {
+		tl := tp.getQueue(addr)
+		if tl == nil {
+			continue
+		}
+		state := tp.currentState.GetStateObj(addr)
+		// 1. drop all low-nonce transaction
+		for _, tx := range tl.Forget(state.Nonce()) {
+			tp.all.Del(tx.Hash())
+		}
 
+		// 2. drop all costly transaction
+		for _, tx := range tl.Release(state.Balance()) {
+			tp.all.Del(tx.Hash())
+		}
+
+		// 3. Get sequentially increasing list and activate them
+		for _, tx := range tl.Ready(state.Nonce()) {
+			if err := tp.addPending(tx); err != nil {
+				continue
+			}
+			activeTxs = append(activeTxs, tx)
+		}
+	}
+	if len(activeTxs) > 0 {
+		tp.eventHub.Post(&core.NewTxsEvent{
+			Txs: activeTxs,
+		})
+	}
+}
+
+// addPending moves processable txs in queue to pending.
+func (tp *TxPool) addPending(tx *types.Transaction) error {
+	tl := tp.getPending(tx.From)
+	if tl == nil {
+		tl = newTxList()
+		tp.pending.Store(tx.From, tl)
+	}
+
+	inserted, old := tl.Add(tx, tp.config.PriceBump)
+	if !inserted {
+		tp.all.Del(tx.Hash())
+		return ErrTxDiscard
+	}
+
+	if old != nil {
+		tp.all.Del(old.Hash())
+	}
+	return nil
 }
 
 func (tp *TxPool) validateTx(tx *types.Transaction) error {

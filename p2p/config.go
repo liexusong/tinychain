@@ -4,8 +4,9 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/spf13/viper"
 	"github.com/libp2p/go-libp2p-crypto"
-	"log"
 )
+
+
 
 type Config struct {
 	seeds         []ma.Multiaddr // Seed nodes for initialization
