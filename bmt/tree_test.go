@@ -20,6 +20,21 @@ func CreateBucketTree() *BucketTree {
 	return NewBucketTree(db)
 }
 
+func TestBucketTree_WithoutDB(t *testing.T) {
+	tree := NewBucketTree(nil)
+	writeSet := NewWriteSet()
+	writeSet["test1"] = []byte("asdffsdf")
+	writeSet["abcd"] = []byte("test2asd")
+	writeSet["lslsl"] = []byte("test3f")
+	writeSet["werw"] = []byte("test12as")
+	writeSet["ffff"] = []byte("FDas")
+	writeSet["asdf"] = []byte("asdfff")
+	err := tree.Init(nil)
+	assert.Nil(t, err)
+	err = tree.Prepare(writeSet)
+	assert.Nil(t, err)
+}
+
 func TestBucketTree_Process(t *testing.T) {
 	writeSet := NewWriteSet()
 	writeSet["test1"] = []byte("asdffsdf")

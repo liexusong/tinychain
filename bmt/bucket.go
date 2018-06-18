@@ -124,7 +124,7 @@ func (ht *HashTable) put(key string, value []byte) error {
 	index := ht.getIndex(key)
 	bucket = ht.buckets[index]
 	if bucket == nil {
-		if hash := ht.BucketHash[index]; !hash.Nil() {
+		if hash := ht.BucketHash[index]; !hash.Nil() && ht.db != nil {
 			bucket, err = ht.db.GetBucket(hash)
 			if err != nil {
 				return err
@@ -154,7 +154,7 @@ func (ht *HashTable) get(key string) ([]byte, error) {
 	index := ht.getIndex(key)
 	bucket = ht.buckets[index]
 	if bucket == nil {
-		if hash := ht.BucketHash[index]; !hash.Nil() {
+		if hash := ht.BucketHash[index]; !hash.Nil() && ht.db != nil {
 			// Get bucket from db by bucket_hash
 			bucket, err = ht.db.GetBucket(ht.BucketHash[index])
 			if err != nil {
@@ -169,6 +169,9 @@ func (ht *HashTable) get(key string) ([]byte, error) {
 }
 
 func (ht *HashTable) store() error {
+	if ht.db == nil {
+		return ErrDbNotOpen
+	}
 	ht.lock.Lock()
 	defer ht.lock.Unlock()
 	for i, dirty := range ht.dirty {

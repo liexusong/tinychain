@@ -9,7 +9,8 @@ import (
 )
 
 var (
-	log = common.GetLogger("bucket_tree")
+	log          = common.GetLogger("bucket_tree")
+	ErrDbNotOpen = errors.New("db not open")
 )
 
 const (
@@ -77,6 +78,9 @@ func (bt *BucketTree) Init(rootHash []byte) error {
 		// Create a new hash table
 		bt.hashTable = NewHashTable(bt.db, bt.Capacity)
 	} else {
+		if bt.db == nil {
+			return ErrDbNotOpen
+		}
 		rhash := common.BytesToHash(rootHash)
 		// Read an existed bucket_tree from db
 		root, err = bt.db.GetNode(rhash)
@@ -187,6 +191,9 @@ func (bt *BucketTree) processNodes() error {
 }
 
 func (bt *BucketTree) Commit() error {
+	if bt.db == nil {
+		return ErrDbNotOpen
+	}
 	if !bt.dirty {
 		return nil
 	}

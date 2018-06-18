@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"crypto/sha256"
 	"encoding/binary"
-	"github.com/libp2p/go-libp2p-crypto"
 )
 
 const (

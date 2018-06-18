@@ -9,6 +9,7 @@ import (
 	"errors"
 	"tinychain/bmt"
 	"tinychain/db/leveldb"
+	"strconv"
 )
 
 const (
@@ -138,8 +139,8 @@ type Transactions []*Transaction
 
 func (txs Transactions) Hash() common.Hash {
 	txSet := bmt.WriteSet{}
-	for _, tx := range txs {
-		txSet[tx.Hash().String()] = tx.Hash().Bytes()
+	for i, tx := range txs {
+		txSet[strconv.Itoa(i)] = tx.Hash().Bytes()
 	}
 	root, _ := bmt.Hash(txSet)
 	return root

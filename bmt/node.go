@@ -88,6 +88,9 @@ func (node *MerkleNode) computeHash() (common.Hash, error) {
 }
 
 func (node *MerkleNode) store() error {
+	if node.db == nil {
+		return ErrDbNotOpen
+	}
 	return node.db.PutNode(node.Hash(), node)
 }
 

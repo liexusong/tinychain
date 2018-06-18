@@ -3,6 +3,8 @@ package types
 import (
 	"tinychain/common"
 	json "github.com/json-iterator/go"
+	"tinychain/bmt"
+	"strconv"
 )
 
 // Receipt represents the results of a transaction
@@ -12,7 +14,7 @@ type Receipt struct {
 	Status          bool           `json:"status"`           // Transaction executing success or failed
 	TxHash          common.Hash    `json:"tx_hash"`          // Transaction hash
 	ContractAddress common.Address `json:"contract_address"` // Contract address
-	GasUsed         uint64       `json:"gas_used"`         // gas used of transaction
+	GasUsed         uint64         `json:"gas_used"`         // gas used of transaction
 }
 
 func NewRecipet(root common.Hash, status bool, txHash common.Hash, gasUsed uint64) *Receipt {
@@ -39,10 +41,12 @@ func (re *Receipt) Deserialize(d []byte) error {
 type Receipts []*Receipt
 
 func (rps Receipts) Hash() common.Hash {
-	var hash []byte
-	for _, receipt := range rps {
+	receiptSet := bmt.WriteSet{}
+	for i, receipt := range rps {
 		data, _ := receipt.Serialize()
-		hash = append(hash, data...)
+		hash := common.Sha256(data)
+		receiptSet[strconv.Itoa(i)] = hash.Bytes()
 	}
-	return common.Sha256(hash)
+	root, _ := bmt.Hash(receiptSet)
+	return root
 }
