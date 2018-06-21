@@ -16,8 +16,11 @@ import (
 
 var (
 	autoRefreshInterval = 1 * time.Hour
-	bucketSize          = 16
-	loopTimePerSync     = 8
+)
+
+const (
+	BUCKET_SIZE        = 16
+	LOOP_TIME_PER_SYNC = 8
 )
 
 type RouteTable struct {
@@ -41,13 +44,13 @@ func NewRouteTable(config *Config, peer *Peer) *RouteTable {
 		peer:      peer,
 		peerStore: peer.host.Peerstore(),
 		routeTable: kbucket.NewRoutingTable(
-			bucketSize,
+			BUCKET_SIZE,
 			kbucket.ConvertPeerID(localId),
 			time.Second*30,
 			pstore,
 		),
 		seeds:                config.seeds,
-		maxPeersCountForSync: bucketSize,
+		maxPeersCountForSync: BUCKET_SIZE,
 		routeFilePath:        config.routeFilePath,
 	}
 	//table.routeTable.Update(localId)
@@ -97,7 +100,6 @@ func (table *RouteTable) AddPeerInfo(prettyID string, addrStr []string) error {
 
 	log.Infof("A peer is founded with pid %s and addrs %s.\n", pid.Pretty(), addrs)
 	table.AddPeerWithAddrs(pid, addrs)
-	table.routeTable.Update(pid)
 	//table.onRouteTableChange()
 	return nil
 }
@@ -109,7 +111,7 @@ func (table *RouteTable) AddPeer(pid peer.ID, addr ma.Multiaddr) {
 	}
 	log.Infof("Adding Peer:%s,%s\n", pid.Pretty(), addr.String())
 	table.peerStore.AddAddr(pid, addr, peerstore.PermanentAddrTTL)
-	table.routeTable.Update(pid)
+	table.update(pid)
 }
 
 // Add peer with []ma.Multiaddrs
@@ -122,7 +124,7 @@ func (table *RouteTable) AddPeerWithAddrs(pid peer.ID, addrs []ma.Multiaddr) {
 	} else {
 		table.peerStore.AddAddrs(pid, addrs, peerstore.PermanentAddrTTL)
 	}
-	table.routeTable.Update(pid)
+	table.update(pid)
 }
 
 func (table *RouteTable) AddIPFSPeer(addr ma.Multiaddr) error {
@@ -179,7 +181,7 @@ func (table *RouteTable) SyncRouteFromNeighbor() {
 	syncedPeers := make(map[peer.ID]bool)
 	var wg sync.WaitGroup
 
-	loopTime := loopTimePerSync
+	loopTime := LOOP_TIME_PER_SYNC
 	for loopTime > 0 {
 		loopTime -= 1
 
@@ -255,6 +257,14 @@ func (table *RouteTable) refreshLoop() {
 			return
 		}
 	}
+}
+
+func (table *RouteTable) nearestPeers(id peer.ID, count int) []peer.ID {
+	return table.routeTable.NearestPeers(kbucket.ConvertPeerID(id), count)
+}
+
+func (table *RouteTable) update(id peer.ID) {
+	table.routeTable.Update(id)
 }
 
 // Load route table from file

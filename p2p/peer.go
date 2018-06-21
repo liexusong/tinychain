@@ -21,12 +21,16 @@ import (
 )
 
 const (
-	MaxRespBufSize = 100
+	MaxRespBufSize  = 100
+	MaxNearestPeers = 20
+	DEFAULT_TIMEOUT = time.Second * 60
 )
 
 var (
 	TransProtocol = protocol.ID("/chain/1.0.0.")
 	log           = common.GetLogger("p2p")
+
+	ErrSendToSelf = errors.New("Send message to self")
 )
 
 // NewHost construct a host of libp2p
@@ -90,6 +94,7 @@ func newHost(port int, privKey crypto.PrivKey) (*bhost.BasicHost, error) {
 
 // Peer stands for a logical peer of tinychain's p2p layer
 type Peer struct {
+	mux        *event.TypeMux
 	host       *bhost.BasicHost // Local peer host
 	routeTable *RouteTable      // Local route table
 	context    context.Context
@@ -97,7 +102,7 @@ type Peer struct {
 	quitCh     chan struct{}    // quit channel
 	protocols  sync.Map         // Handlers of upper layer. map[string][]*Protocol
 	timeout    time.Duration    // Timeout of per connection
-	mux        *event.TypeMux
+	ready      chan struct{}    // Physical network is ready or not
 }
 
 // Creates new peer struct
@@ -113,7 +118,7 @@ func New(config *Config) (*Peer, error) {
 		context: context.Background(),
 		respCh:  make(chan *pb.Message, MaxRespBufSize),
 		quitCh:  make(chan struct{}),
-		timeout: time.Second * 60,
+		timeout: DEFAULT_TIMEOUT,
 		mux:     event.GetEventhub(),
 	}
 	peer.routeTable = NewRouteTable(config, peer)
@@ -146,8 +151,7 @@ func (peer *Peer) Connect(pid peer.ID) error {
 // Send message to a peer
 func (peer *Peer) Send(pid peer.ID, typ string, data interface{}) error {
 	if pid == peer.ID() {
-		log.Info("Cannot send message to peer itself.")
-		return errors.New("Send message to self")
+		return ErrSendToSelf
 	}
 	err := peer.Connect(pid)
 	if err != nil {
@@ -155,7 +159,12 @@ func (peer *Peer) Send(pid peer.ID, typ string, data interface{}) error {
 	}
 	stream := NewStreamWithPid(pid, peer)
 	//peer.Streams.AddStream(stream)
-	return stream.send(typ, data)
+	err = stream.send(typ, data)
+	if err != nil {
+		return err
+	}
+	peer.routeTable.update(pid)
+	return nil
 }
 
 func (peer *Peer) Start() {
@@ -176,7 +185,7 @@ func (peer *Peer) Stop() {
 	}
 	peer.routeTable.Stop()
 	peer.quitCh <- struct{}{}
-	log.Info("Stop peer.")
+	log.Info("Peer stopped successfully.")
 }
 
 func (peer *Peer) ListenMsg() {
@@ -185,7 +194,7 @@ func (peer *Peer) ListenMsg() {
 		case <-peer.quitCh:
 			break
 		case message := <-peer.respCh:
-			log.Infof("Receive message: Name:%s, data:%s \n", message.Name, message.Data)
+			//log.Infof("Receive message: Name:%s, data:%s \n", message.Name, message.Data)
 			// Handler run
 			if protocols, exist := peer.protocols.Load(message.Name); exist {
 				for _, proto := range protocols.([]Protocol) {
@@ -209,7 +218,22 @@ func (peer *Peer) Broadcast(pbName string, data interface{}) {
 		if pid == peer.ID() {
 			continue
 		}
-		stream := NewStreamWithPid(pid, peer)
-		go stream.send(pbName, data)
+		err := peer.Send(pid, pbName, data)
+		if err != nil {
+			log.Errorf("failed to send %s msg to peer %s, %s", pbName, pid.Pretty(), err)
+		}
+	}
+}
+
+// Multicast retrieves nearest peers from route table and send msg to them.
+func (peer *Peer) Multicast(pids []peer.ID, pbName string, data interface{}) {
+	for _, pid := range pids {
+		if pid == peer.ID() {
+			continue
+		}
+		err := peer.Send(pid, pbName, data)
+		if err != nil {
+			log.Errorf("failed to send %s msg to peer %s, %s", pbName, pid.Pretty(), err)
+		}
 	}
 }

@@ -9,11 +9,18 @@ import "github.com/libp2p/go-libp2p-peer"
 // DiscvActive will be throw when peers discover run 6 rounds
 type DiscvActiveEvent struct{}
 
-// Message received from p2p network layer
+// Message sent with p2p network layer
 type SendMsgEvent struct {
 	Target peer.ID     // Target peer id
 	Typ    string      // Message type
 	Data   interface{} // Message data
+}
+
+// Multisend msg with p2p network layer
+type MultiSendEvent struct {
+	Targets []peer.ID
+	Typ     string
+	Data    interface{}
 }
 
 // Protocol manage event

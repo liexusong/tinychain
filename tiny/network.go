@@ -19,7 +19,8 @@ type Peer struct {
 	event   *event.TypeMux
 
 	// Send message event subscription
-	sendSub event.Subscription
+	sendSub      event.Subscription
+	multiSendSub event.Subscription
 
 	quitCh chan struct{}
 }
@@ -40,6 +41,7 @@ func NewNetwork(config *p2p.Config) Network {
 
 func (p *Peer) Start() error {
 	p.sendSub = p.event.Subscribe(&p2p.SendMsgEvent{})
+	p.multiSendSub = p.event.Subscribe(&p2p.MultiSendEvent{})
 	go p.listen()
 	return nil
 }
@@ -49,12 +51,13 @@ func (p *Peer) listen() {
 		select {
 		case ev := <-p.sendSub.Chan():
 			msg := ev.(*p2p.SendMsgEvent)
-			err := p.network.Send(msg.Target, msg.Typ, msg.Data)
-			if err != nil {
-				log.Errorf("Failed to send message to %s with type %s", msg.Target, msg.Typ)
-			}
+			go p.network.Send(msg.Target, msg.Typ, msg.Data)
+		case ev := <-p.multiSendSub.Chan():
+			msg := ev.(*p2p.MultiSendEvent)
+			go p.network.Multicast(msg.Targets, msg.Typ, msg.Data)
 		case p.quitCh:
 			p.sendSub.Unsubscribe()
+			return
 		}
 	}
 }

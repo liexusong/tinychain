@@ -16,6 +16,9 @@ var (
 	routeSyncTimeout = 45 * time.Second
 	normalTimeout    = 30 * time.Second
 	okTimeout        = 30 * time.Second
+
+	ErrInvalidType         = errors.New("invalid data type of message")
+	ErrMsgTypeNotMatchData = errors.New("message type is not match with data")
 )
 
 type Stream struct {
@@ -54,7 +57,7 @@ func (s *Stream) connect() error {
 		TransProtocol,
 	)
 	if err != nil {
-		log.Infof("Failed to connect remote peer %s:%s\n", s.remoteId.Pretty(), err)
+		//log.Infof("Failed to connect remote peer %s:%s\n", s.remoteId.Pretty(), err)
 		return err
 	}
 	s.stream = stream
@@ -116,12 +119,10 @@ func (s *Stream) send(typ string, data interface{}) error {
 	case *pb.NormalData:
 		message, err = pb.NewNormalMsg(typ, data.(*pb.NormalData))
 	default:
-		log.Error("Invalid data type of message")
-		return errors.New("Invalid data type of message")
+		return ErrInvalidType
 	}
 	if err != nil {
-		log.Infof("Failed to send message %s\n", typ)
-		return err
+		return ErrMsgTypeNotMatchData
 	}
 
 	// Set deadline
@@ -262,11 +263,8 @@ func (s *Stream) handleMsg(message *pb.Message) error {
 		//log.Infof("Message content: %s\n", message.Data)
 		s.peer.respCh <- message
 		s.Close(nil)
-		return nil
 	}
-	log.Infof("Invalid message name %s.\n", pbName)
-	return errors.New("invalid message name")
-
+	return nil
 }
 
 // Sync route request handler

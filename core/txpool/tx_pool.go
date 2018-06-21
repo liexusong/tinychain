@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	log            = common.GetLogger("txpool")
-	txPool *TxPool = nil
+	log = common.GetLogger("txpool")
 
 	ErrTxDuplicate = errors.New("transaction duplicate")
 	ErrPoolFull    = errors.New("tx_pool is full")
@@ -23,7 +22,7 @@ var (
 type TxPool struct {
 	config       *Config              // Txpool config
 	currentState *state.StateDB       // Current state
-	txValidator  executor.TxValidator // Tx validator wrapper
+	validator    executor.TxValidator // Tx validator wrapper
 	all          *txLookup            // Cache all tx hash to accelerate searching
 	eventHub     *event.TypeMux
 	quitCh       chan struct{}
@@ -41,10 +40,10 @@ type TxPool struct {
 
 func NewTxPool(config *Config, validator executor.TxValidator) *TxPool {
 	return &TxPool{
-		config:      config,
-		txValidator: validator,
-		eventHub:    event.GetEventhub(),
-		all:         newTxLookup(),
+		config:    config,
+		validator: validator,
+		eventHub:  event.GetEventhub(),
+		all:       newTxLookup(),
 	}
 }
 
@@ -56,7 +55,7 @@ func (tp *TxPool) listen() {
 	for {
 		select {
 		case ev := <-tp.newTxSub.Chan():
-			tp.Add(ev.(*core.NewTxEvent).Tx)
+			tp.add(ev.(*core.NewTxEvent).Tx)
 		case <-tp.quitCh:
 			tp.newTxSub.Unsubscribe()
 			break
@@ -93,6 +92,12 @@ func (tp *TxPool) getPending(addr common.Address) *txList {
 }
 
 func (tp *TxPool) add(tx *types.Transaction) error {
+	// Check tx duplicate
+	if tp.all.Get(tx.Hash()) {
+		log.Errorf("Transaction %s duplicate.", tx.Hash())
+		return ErrTxDuplicate
+	}
+
 	// Validate tx
 	if err := tp.validateTx(tx); err != nil {
 		log.Errorf("Validate tx failed, %s", err)
@@ -216,5 +221,5 @@ func (tp *TxPool) addPending(tx *types.Transaction) error {
 }
 
 func (tp *TxPool) validateTx(tx *types.Transaction) error {
-	return tp.txValidator.ValidateTx(tx)
+	return tp.validator.ValidateTx(tx)
 }
