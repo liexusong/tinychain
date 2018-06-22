@@ -1,6 +1,9 @@
 package core
 
-import "tinychain/core/types"
+import (
+	"tinychain/core/types"
+	"math/big"
+)
 
 /*
 	Block events
@@ -10,6 +13,10 @@ type NewBlockEvent struct {
 }
 
 type BlockBroadcastEvent struct{}
+
+type BlockCommitEvent struct {
+	Height *big.Int
+}
 
 /*
 	Transaction events

@@ -99,7 +99,7 @@ func (tp *TxPool) add(tx *types.Transaction) error {
 	}
 
 	// Validate tx
-	if err := tp.validateTx(tx); err != nil {
+	if err := tp.validate(tx); err != nil {
 		log.Errorf("Validate tx failed, %s", err)
 		return err
 	}
@@ -132,11 +132,11 @@ func (tp *TxPool) addQueue(tx *types.Transaction) error {
 	tl := tp.getQueue(tx.From)
 	if tl == nil {
 		tl := newTxList()
-		tl.Add(tx, tp.config.PriceBump)
+		tl.add(tx, tp.config.PriceBump)
 		tp.queue.Store(tx.From, tl)
 		return nil
 	}
-	inserted, _ := tl.Add(tx, tp.config.PriceBump)
+	inserted, _ := tl.add(tx, tp.config.PriceBump)
 	if !inserted {
 		return ErrTxDiscard
 	}
@@ -208,7 +208,7 @@ func (tp *TxPool) addPending(tx *types.Transaction) error {
 		tp.pending.Store(tx.From, tl)
 	}
 
-	inserted, old := tl.Add(tx, tp.config.PriceBump)
+	inserted, old := tl.add(tx, tp.config.PriceBump)
 	if !inserted {
 		tp.all.Del(tx.Hash())
 		return ErrTxDiscard
@@ -220,6 +220,6 @@ func (tp *TxPool) addPending(tx *types.Transaction) error {
 	return nil
 }
 
-func (tp *TxPool) validateTx(tx *types.Transaction) error {
+func (tp *TxPool) validate(tx *types.Transaction) error {
 	return tp.validator.ValidateTx(tx)
 }

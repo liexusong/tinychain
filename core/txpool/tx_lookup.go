@@ -3,12 +3,11 @@ package txpool
 import (
 	"tinychain/common"
 	"sync"
-	"sync/atomic"
 )
 
 type txLookup struct {
-	all   sync.Map
-	size  atomic.Value // length cache
+	mu  sync.RWMutex
+	all map[common.Hash]struct{}
 }
 
 func newTxLookup() *txLookup {
@@ -16,31 +15,26 @@ func newTxLookup() *txLookup {
 }
 
 func (tl *txLookup) Len() uint64 {
-	if size := tl.size.Load(); size != nil {
-		return size.(uint64)
-	}
-	var length uint64
-	tl.all.Range(func(key, value interface{}) bool {
-		length++
-		return true
-	})
-	tl.size.Store(length)
-	return length
+	tl.mu.RLock()
+	defer tl.mu.RUnlock()
+	return uint64(len(tl.all))
 }
 
 func (tl *txLookup) Get(hash common.Hash) bool {
-	_, exist := tl.all.Load(hash)
+	tl.mu.RLock()
+	defer tl.mu.RUnlock()
+	_, exist := tl.all[hash]
 	return exist
 }
 
 func (tl *txLookup) Add(hash common.Hash) {
-	tl.all.Store(hash, struct{}{})
-	tl.size.Store(nil)
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	tl.all[hash] = struct{}{}
 }
 
 func (tl *txLookup) Del(hash common.Hash) {
-	if _, exist := tl.all.Load(hash); exist {
-		tl.size.Store(nil)
-	}
-	tl.all.Delete(hash)
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	delete()
 }

@@ -11,8 +11,8 @@ import (
 
 var (
 	logMgr *LoggerMgr
-	log          *logging.Logger
-	once         sync.Once
+	log    *logging.Logger
+	once   sync.Once
 )
 
 func init() {

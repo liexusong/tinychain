@@ -2,13 +2,14 @@ package txpool
 
 import (
 	"tinychain/core/types"
-	"sync"
 	"sort"
 	"math/big"
+	"sync"
 )
 
 type txList struct {
-	txs   sync.Map
+	mu    sync.RWMutex
+	txs   map[uint64]*types.Transaction
 	cache types.Transactions
 }
 
@@ -16,18 +17,17 @@ func newTxList() *txList {
 	return &txList{}
 }
 
-func (list *txList) Get(nonce uint64) *types.Transaction {
-	if tx, exist := list.txs.Load(nonce); exist {
-		return tx.(*types.Transaction)
-	}
-	return nil
+func (list *txList) get(nonce uint64) *types.Transaction {
+	list.mu.RLock()
+	defer list.mu.RUnlock()
+	return list.txs[nonce]
 }
 
 // Add adds a new transaction to the list, returning whether the
 // transaction was accepted, and if yes, any previous transaction it replaced.
 //
 // PriceBump is the percent number
-func (list *txList) Add(tx *types.Transaction, priceBump int) (bool, *types.Transaction) {
+func (list *txList) add(tx *types.Transaction, priceBump int) (bool, *types.Transaction) {
 	canInsert, old := list.CanInsert(tx, priceBump)
 	if !canInsert {
 		return false, nil
@@ -37,13 +37,15 @@ func (list *txList) Add(tx *types.Transaction, priceBump int) (bool, *types.Tran
 }
 
 func (list *txList) Put(tx *types.Transaction) {
-	list.txs.Store(tx.Nonce, tx)
+	list.mu.Lock()
+	defer list.mu.Unlock()
+	list.txs[tx.Nonce] = tx
 	list.cache = nil
 }
 
 func (list *txList) CanInsert(tx *types.Transaction, priceBump int) (bool, *types.Transaction) {
 	var old *types.Transaction
-	if old := list.Get(tx.Nonce); old != nil {
+	if old := list.get(tx.Nonce); old != nil {
 		// Replacement strategy. Temporary design
 		boundGas := old.GasLimit * uint64(100+priceBump) / 100
 		if boundGas > tx.GasLimit {
@@ -55,30 +57,27 @@ func (list *txList) CanInsert(tx *types.Transaction, priceBump int) (bool, *type
 
 // Del deletes a transaction from the list
 func (list *txList) Del(nonce uint64) {
-	if _, exist := list.txs.Load(nonce); !exist {
+	if old := list.get(nonce); old == nil {
 		return
 	}
-	list.txs.Delete(nonce)
+
+	delete(list.txs, nonce)
 	list.cache = nil
 }
 
 func (list *txList) Len() uint64 {
-	var length uint64
-	list.txs.Range(func(key, value interface{}) bool {
-		length++
-		return true
-	})
-	return length
+	list.mu.RLock()
+	defer list.mu.RUnlock()
+	return uint64(len(list.txs))
 }
 
 // All creates a nonce-sorted slice of current transaction list,
 // and the result will be cache in case any modifications are made
 func (list *txList) All() types.Transactions {
 	if list.cache == nil {
-		list.txs.Range(func(key, value interface{}) bool {
-			list.cache = append(list.cache, value.(*types.Transaction))
-			return true
-		})
+		for _, tx := range list.txs {
+			list.cache = append(list.cache, tx)
+		}
 		sort.Sort(types.NonceSortedList(list.cache))
 	}
 
@@ -95,18 +94,18 @@ func (list *txList) filter(filter func(tx *types.Transaction) bool) (types.Trans
 		match   types.Transactions
 		unmatch types.Transactions
 	)
-	list.txs.Range(func(key, value interface{}) bool {
-		tx := value.(*types.Transaction)
+	list.mu.Lock()
+	defer list.mu.Unlock()
+	for _, tx := range list.txs {
 		if filter(tx) {
 			match = append(match, tx)
 		} else {
 			unmatch = append(unmatch, tx)
 		}
-		return true
-	})
+	}
 
 	for _, tx := range unmatch {
-		list.txs.Delete(tx.Nonce)
+		delete(list.txs, tx.Nonce)
 	}
 
 	list.cache = nil
@@ -121,16 +120,18 @@ func (list *txList) Ready(start uint64) types.Transactions {
 		results types.Transactions
 		nonce   = start
 	)
+	list.mu.Lock()
+	defer list.mu.Unlock()
 	for {
-		if tx, exist := list.txs.Load(nonce); exist {
-			results = append(results, tx.(*types.Transaction))
+		if tx, exist := list.txs[nonce]; exist {
+			results = append(results, tx)
 			nonce++
 		} else {
 			break
 		}
 	}
 	for _, tx := range results {
-		list.txs.Delete(tx.Nonce)
+		delete(list.txs, tx.Nonce)
 	}
 	list.cache = nil
 	return results
