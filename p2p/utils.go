@@ -6,9 +6,9 @@ import (
 	"github.com/libp2p/go-libp2p-host"
 	"strings"
 	"fmt"
-	"log"
 	"github.com/libp2p/go-libp2p-crypto"
 	"crypto/rand"
+	"errors"
 )
 
 // Parse ipfs addr like '/ip4/127.0.0.1/tcp/65532/ipfs/QmWxRLJvALbQRqE8ay91e5kzeNuPkNZQ4UkvXRrPxfXFuX'
@@ -39,8 +39,7 @@ func GetCompleteAddrs(h host.Host) ([]ma.Multiaddr, error) {
 	for _, addr := range addrs {
 		c, err := ma.NewMultiaddr(fmt.Sprintf("%s/ipfs/%s", addr, peer.IDB58Encode(h.ID())))
 		if err != nil {
-			log.Printf("Invalid multiaddr:%s\n", addr)
-			return nil, err
+			return nil, errors.New(fmt.Sprintf("Invalid multiaddr:%s\n", addr))
 		}
 		comAddrs = append(comAddrs, c)
 	}
