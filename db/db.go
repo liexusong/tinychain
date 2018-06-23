@@ -197,13 +197,13 @@ func (tdb *TinyDB) PutBlock(block *types.Block) error {
 	return nil
 }
 
-func (tdb *TinyDB) GerReceipts(height *big.Int, hash common.Hash) (*types.Receipts, error) {
-
-}
-
-func (tdb *TinyDB) PutReceipts(height *big.Int, hash common.Hash, receipt *types.Receipt) error {
-
-}
+//func (tdb *TinyDB) GerReceipts(height *big.Int, hash common.Hash) (*types.Receipts, error) {
+//
+//}
+//
+//func (tdb *TinyDB) PutReceipts(height *big.Int, hash common.Hash, receipt *types.Receipt) error {
+//
+//}
 
 func (tdb *TinyDB) GetTxMeta(txHash common.Hash) (*types.TxMeta, error) {
 	data, err := tdb.db.Get([]byte("l" + txHash.String()))

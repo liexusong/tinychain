@@ -7,7 +7,6 @@ import (
 	json "github.com/json-iterator/go"
 	"encoding/binary"
 	"encoding/hex"
-	"tinychain/db"
 )
 
 // BNonce is a 64-bit hash which proves that a sufficient amount of
@@ -123,33 +122,6 @@ func (bl *Block) Size() uint64 {
 	tmp, _ := bl.Serialize()
 	bl.size.Store(len(tmp))
 	return uint64(len(tmp))
-}
-
-// Commit stores the block to db
-func (bl *Block) Commit(db *db.TinyDB) error {
-	if hash := bl.hash.Load(); hash == nil {
-		bl.Hash()
-	}
-
-	// Commit transactions tree
-	err := bl.Transactions.Commit(db.LDB())
-	if err != nil {
-		return err
-	}
-
-	// Commit header
-	err = db.PutHash(bl.Height(), bl.Hash())
-	if err != nil {
-		return err
-	}
-	err = db.PutHeader(bl.Header)
-	if err != nil {
-		return err
-	}
-	err = db.PutHeight(bl.Hash(), bl.Height())
-
-	// Commit block
-	return db.PutBlock(bl)
 }
 
 func (bl *Block) Serialize() ([]byte, error) { return json.Marshal(bl) }

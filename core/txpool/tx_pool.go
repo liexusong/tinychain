@@ -2,7 +2,6 @@ package txpool
 
 import (
 	"tinychain/common"
-	"tinychain/executor"
 	"tinychain/core/types"
 	"tinychain/event"
 	"sync"
@@ -19,11 +18,15 @@ var (
 	ErrTxDiscard   = errors.New("old transaction is better, discard the new one")
 )
 
+type TxValidator interface {
+	ValidateTx(transaction *types.Transaction) error
+}
+
 type TxPool struct {
-	config       *Config              // Txpool config
-	currentState *state.StateDB       // Current state
-	validator    executor.TxValidator // Tx validator wrapper
-	all          *txLookup            // Cache all tx hash to accelerate searching
+	config       *Config        // Txpool config
+	currentState *state.StateDB // Current state
+	validator    TxValidator    // Tx validator wrapper
+	all          *txLookup      // Cache all tx hash to accelerate searching
 	eventHub     *event.TypeMux
 	quitCh       chan struct{}
 
@@ -38,17 +41,20 @@ type TxPool struct {
 	newTxSub event.Subscription
 }
 
-func NewTxPool(config *Config, validator executor.TxValidator) *TxPool {
+func NewTxPool(config *Config, validator TxValidator, state *state.StateDB) *TxPool {
 	return &TxPool{
-		config:    config,
-		validator: validator,
-		eventHub:  event.GetEventhub(),
-		all:       newTxLookup(),
+		config:       config,
+		validator:    validator,
+		eventHub:     event.GetEventhub(),
+		all:          newTxLookup(),
+		currentState: state,
+		quitCh:       make(chan struct{}, 1),
 	}
 }
 
 func (tp *TxPool) Start() {
 	tp.newTxSub = tp.eventHub.Subscribe(&core.NewTxEvent{})
+	go tp.listen()
 }
 
 func (tp *TxPool) listen() {
