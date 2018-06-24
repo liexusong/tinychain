@@ -4,11 +4,11 @@ import (
 	"sync"
 	"tinychain/event"
 	"tinychain/core/types"
-	"tinychain/executor"
 	"tinychain/core"
 	"math/big"
 	"github.com/pkg/errors"
 	"tinychain/common"
+	batcher "github.com/yyh1102/go-batcher"
 )
 
 var (
@@ -18,30 +18,48 @@ var (
 	ErrPoolFull       = errors.New("block pool is full")
 )
 
+type BlockValidator interface {
+	ValidateHeader(block *types.Block) error
+	ValidateBody(block *types.Block) error
+}
+
+type Blockchain interface {
+}
+
 type BlockPool struct {
-	config     *Config
-	mu         sync.RWMutex
-	blockchain *core.Blockchain          // Blockchain
-	validator  executor.BlockValidator   // Block validator
-	valid      map[*big.Int]*types.Block // Valid blocks pool. map[height]*block
-	event      *event.TypeMux
-	quitCh     chan struct{}
+	config    *Config
+	mu        sync.RWMutex
+	validator BlockValidator            // Block validator
+	valid     map[*big.Int]*types.Block // Valid blocks pool. map[height]*block
+	batch     *batcher.Batch            // Batch for blocks launching
+	event     *event.TypeMux
+	quitCh    chan struct{}
 
 	blockSub  event.Subscription
 	commitSub event.Subscription // Receive msg when new blocks are appended to blockchain
 }
 
-func NewBlockPool(config *Config, blockchain *core.Blockchain, validator executor.BlockValidator) *BlockPool {
-	return &BlockPool{
-		config:     config,
-		event:      event.GetEventhub(),
-		validator:  validator,
-		blockchain: blockchain,
-		valid:      make(map[*big.Int]*types.Block, config.MaxBlockSize),
+func NewBlockPool(config *Config, validator BlockValidator) *BlockPool {
+	bp := &BlockPool{
+		config:    config,
+		event:     event.GetEventhub(),
+		validator: validator,
+		valid:     make(map[*big.Int]*types.Block, config.MaxBlockSize),
 	}
+
+	batch := batcher.NewBatch(
+		"APPEND_VALID_BLOCK",
+		config.BatchCapacity,
+		config.BatchTimeout,
+		bp.launch,
+	)
+
+	bp.batch = batch
+	return bp
 }
 
 func (bp *BlockPool) Start() {
+
 	bp.blockSub = bp.event.Subscribe(&core.NewBlockEvent{})
 	go bp.listen()
 }
@@ -62,6 +80,19 @@ func (bp *BlockPool) listen() {
 	}
 }
 
+// launch implements cbFunc in batcher.
+// It will be invoked and post a batch of valid blocks when reaches batch size or timeout.
+func (bp *BlockPool) launch(batch []interface{}) {
+	var blocks []*types.Block
+	for _, item := range batch {
+		blocks = append(blocks, item.(*types.Block))
+	}
+	appendBlockEv := &core.AppendBlockEvent{
+		Blocks: blocks,
+	}
+	go bp.event.Post(appendBlockEv)
+}
+
 func (bp *BlockPool) Valid() []*types.Block {
 	var blocks []*types.Block
 	bp.mu.RLock()
@@ -73,7 +104,8 @@ func (bp *BlockPool) Valid() []*types.Block {
 }
 
 func (bp *BlockPool) add(block *types.Block) error {
-	bp.mu.RLock()
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
 	// Check block duplicate
 	if old := bp.valid[block.Height()]; old != nil {
 		// TODO Check can be replace or not?
@@ -82,15 +114,12 @@ func (bp *BlockPool) add(block *types.Block) error {
 	if bp.Size() >= bp.config.MaxBlockSize {
 		return ErrPoolFull
 	}
-	bp.mu.RUnlock()
 
 	// Validate block
 	if err := bp.validate(block); err != nil {
 		return err
 	}
 
-	bp.mu.Lock()
-	defer bp.mu.Unlock()
 	bp.valid[block.Height()] = block
 	return nil
 }
@@ -98,10 +127,16 @@ func (bp *BlockPool) add(block *types.Block) error {
 func (bp *BlockPool) validate(block *types.Block) error {
 	err := bp.validator.ValidateHeader(block)
 	if err != nil {
+		log.Errorf("Error occurs when validating block header whose height is %s, %s", block.Height(), err)
 		return err
 	}
 
-	return bp.validator.ValidateBody(block)
+	err = bp.validator.ValidateBody(block)
+	if err != nil {
+		log.Errorf("Error occurs when validating block body whose height is %s, %s", block.Height(), err)
+		return err
+	}
+	return nil
 }
 
 // Clear picks up the invalid blocks in the pool and removes them.

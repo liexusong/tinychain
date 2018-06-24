@@ -34,20 +34,22 @@ type Transaction struct {
 
 type txData struct {
 	Nonce    uint64         `json:"nonce"`     // Account nonce, which is used to avoid double spending
+	GasPrice uint64         `json:"gas_price"` // Gas price
 	GasLimit uint64         `json:"gas_limit"` // Gas limit of a tx
 	Value    *big.Int       `json:"value"`     // Transferring value
-	From     common.Address `json:"from"`
-	To       common.Address `json:"to"` // Recipient of this tx, nil means contract creation
+	From     common.Address `json:"from"`      // Sender of this tx
+	To       common.Address `json:"to"`        // Recipient of this tx, nil means contract creation
 	Payload  []byte         `json:"payload"`
 }
 
-func NewTransaction(nonce, gasLimit uint64, value *big.Int, payload []byte, from, to common.Address) *Transaction {
-	return &Transaction{txData: NewTxData(nonce, gasLimit, value, payload, from, to)}
+func NewTransaction(nonce, gasPrice, gasLimit uint64, value *big.Int, payload []byte, from, to common.Address) *Transaction {
+	return &Transaction{txData: NewTxData(nonce, gasPrice, gasLimit, value, payload, from, to)}
 }
 
-func NewTxData(nonce, gasLimit uint64, value *big.Int, payload []byte, from, to common.Address) txData {
+func NewTxData(nonce, gasPrice, gasLimit uint64, value *big.Int, payload []byte, from, to common.Address) txData {
 	return txData{
 		Nonce:    nonce,
+		GasPrice: gasPrice,
 		GasLimit: gasLimit,
 		Value:    value,
 		Payload:  payload,
@@ -66,7 +68,7 @@ func (tx *Transaction) Hash() common.Hash {
 	if hash := tx.txHash.Load(); hash != nil {
 		return hash.(common.Hash)
 	}
-	txdata := NewTxData(tx.Nonce, tx.GasLimit, tx.Value, tx.Payload, tx.From, tx.To)
+	txdata := NewTxData(tx.Nonce, tx.GasPrice, tx.GasLimit, tx.Value, tx.Payload, tx.From, tx.To)
 	data, _ := txdata.Serialize()
 	h := common.Sha256(data)
 	tx.txHash.Store(h)
@@ -154,20 +156,6 @@ func (txs Transactions) Commit(db *leveldb.LDBDatabase) error {
 	return bmt.Commit(txSet, db)
 }
 
-type NonceSortedList Transactions
-
-func (txs NonceSortedList) Len() int {
-	return len(txs)
-}
-
-func (txs NonceSortedList) Less(i, j int) bool {
-	return txs[i].Nonce < txs[j].Nonce
-}
-
-func (txs NonceSortedList) Swap(i, j int) {
-	txs[i], txs[j] = txs[j], txs[i]
-}
-
 // TxMeta represents the meta data of a transaction,
 // contains the index of transacitons in a certain block
 type TxMeta struct {
@@ -182,4 +170,39 @@ func (tm *TxMeta) Serialize() ([]byte, error) {
 
 func (tm *TxMeta) Deserialize(d []byte) error {
 	return json.Unmarshal(d, tm)
+}
+
+type NonceSortedList Transactions
+
+func (txs NonceSortedList) Len() int {
+	return len(txs)
+}
+
+func (txs NonceSortedList) Less(i, j int) bool {
+	return txs[i].Nonce < txs[j].Nonce
+}
+
+func (txs NonceSortedList) Swap(i, j int) {
+	txs[i], txs[j] = txs[j], txs[i]
+}
+
+// Nonce-asec-sorted and price-desec-sorted list
+type SortedList Transactions
+
+func (txs SortedList) Len() int {
+	return len(txs)
+}
+
+func (txs SortedList) Less(i, j int) bool {
+	if txs[i].Nonce < txs[j].Nonce {
+		return true
+	} else if txs[i].Nonce == txs[j].Nonce {
+		return txs[i].GasPrice > txs[j].GasPrice
+	} else {
+		return false
+	}
+}
+
+func (txs SortedList) Swap(i, j int) {
+	txs[i], txs[j] = txs[j], txs[i]
 }

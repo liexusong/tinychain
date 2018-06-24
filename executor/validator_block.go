@@ -2,16 +2,26 @@ package executor
 
 import (
 	"tinychain/core/types"
-	"tinychain/core"
+	"math/big"
+	"tinychain/common"
 )
+
+type Blockchain interface {
+	LatestHeight() *big.Int    // Get latest height of blockchain
+	LatestHash() common.Hash   // Get latest block hash
+	LatestBlock() *types.Block // Get latest block
+}
 
 type BlockValidatorImpl struct {
 	config *Config
-	chain  *core.Blockchain
+	chain  Blockchain
 }
 
-func NewBlockValidator() *BlockValidatorImpl {
-
+func NewBlockValidator(config *Config, chain Blockchain) *BlockValidatorImpl {
+	return &BlockValidatorImpl{
+		config: config,
+		chain:  chain,
+	}
 }
 
 // Validate block header

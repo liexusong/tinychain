@@ -8,6 +8,8 @@ import (
 	"tinychain/core/state"
 	"errors"
 	"tinychain/core"
+	batcher "github.com/yyh1102/go-batcher"
+	"sort"
 )
 
 var (
@@ -27,7 +29,8 @@ type TxPool struct {
 	currentState *state.StateDB // Current state
 	validator    TxValidator    // Tx validator wrapper
 	all          *txLookup      // Cache all tx hash to accelerate searching
-	eventHub     *event.TypeMux
+	batch        *batcher.Batch // Batch for txs launching
+	event        *event.TypeMux
 	quitCh       chan struct{}
 
 	// all valid and processable txs.
@@ -42,18 +45,28 @@ type TxPool struct {
 }
 
 func NewTxPool(config *Config, validator TxValidator, state *state.StateDB) *TxPool {
-	return &TxPool{
+	tp := &TxPool{
 		config:       config,
 		validator:    validator,
-		eventHub:     event.GetEventhub(),
+		event:        event.GetEventhub(),
 		all:          newTxLookup(),
 		currentState: state,
 		quitCh:       make(chan struct{}, 1),
 	}
+
+	batch := batcher.NewBatch(
+		"NEW_TXS",
+		config.BatchCapacity,
+		config.BatchTimeout,
+		tp.launch,
+	)
+
+	tp.batch = batch
+	return tp
 }
 
 func (tp *TxPool) Start() {
-	tp.newTxSub = tp.eventHub.Subscribe(&core.NewTxEvent{})
+	tp.newTxSub = tp.event.Subscribe(&core.NewTxEvent{})
 	go tp.listen()
 }
 
@@ -61,7 +74,7 @@ func (tp *TxPool) listen() {
 	for {
 		select {
 		case ev := <-tp.newTxSub.Chan():
-			tp.add(ev.(*core.NewTxEvent).Tx)
+			go tp.add(ev.(*core.NewTxEvent).Tx)
 		case <-tp.quitCh:
 			tp.newTxSub.Unsubscribe()
 			break
@@ -69,13 +82,24 @@ func (tp *TxPool) listen() {
 	}
 }
 
-// Pending returns all nonce-sorted transactions of every address
-func (tp *TxPool) Pending() map[common.Address]types.Transactions {
-	results := make(map[common.Address]types.Transactions)
+func (tp *TxPool) launch(batch []interface{}) {
+	go tp.event.Post(&core.ExecPendingTxEvent{
+		Txs: tp.Pending(),
+	})
+}
+
+// Pending returns all nonce-asec-sorted and gasPrice-desec-sorted list of transactions for every address
+func (tp *TxPool) Pending() types.Transactions {
+	var results types.Transactions
 	tp.pending.Range(func(key, value interface{}) bool {
-		results[key.(common.Address)] = value.(*txList).All()
+		list := value.(*txList).All()
+		for _, tx := range list {
+			results = append(results, tx)
+		}
 		return true
 	})
+
+	sort.Sort(types.SortedList(results))
 	return results
 }
 
@@ -176,11 +200,19 @@ func (tp *TxPool) replacePending(tx *types.Transaction) (bool, *types.Transactio
 func (tp *TxPool) activate(addrs []common.Address) {
 	var activeTxs types.Transactions
 	for _, addr := range addrs {
-		tl := tp.getQueue(addr)
+		state := tp.currentState.GetStateObj(addr)
+
+		// Remove transaction that have processed at prev state
+		tl := tp.getPending(addr)
+		tl.filter(func(tx *types.Transaction) bool {
+			return tx.Nonce < state.Nonce()
+		})
+
+		// Activate transaction in queue
+		tl = tp.getQueue(addr)
 		if tl == nil {
 			continue
 		}
-		state := tp.currentState.GetStateObj(addr)
 		// 1. drop all low-nonce transaction
 		for _, tx := range tl.Forget(state.Nonce()) {
 			tp.all.Del(tx.Hash())
@@ -200,9 +232,7 @@ func (tp *TxPool) activate(addrs []common.Address) {
 		}
 	}
 	if len(activeTxs) > 0 {
-		tp.eventHub.Post(&core.NewTxsEvent{
-			Txs: activeTxs,
-		})
+		tp.postBatch(activeTxs)
 	}
 }
 
@@ -228,4 +258,12 @@ func (tp *TxPool) addPending(tx *types.Transaction) error {
 
 func (tp *TxPool) validate(tx *types.Transaction) error {
 	return tp.validator.ValidateTx(tx)
+}
+
+func (tp *TxPool) postBatch(txs types.Transactions) {
+	var batch []interface{}
+	for _, tx := range txs {
+		batch = append(batch, tx)
+	}
+	tp.batch.Batch(batch)
 }

@@ -4,80 +4,75 @@ import (
 	"tinychain/core"
 	"tinychain/event"
 	"tinychain/core/state"
+	"tinychain/core/types"
+	batcher "github.com/yyh1102/go-batcher"
 )
 
-// Executor handles all data modification and
-// executes and validates state transition
-type Executor interface {
-	Start() error
-	Stop() error
+// Processor represents the interface of block processor
+type Processor interface {
+	Process(block *types.Block) (types.Receipts, error)
 }
 
-type ExecutorImpl struct {
-	processor core.Processor
-	validator Validator        // Validator validate all consensus fields
+type Executor struct {
+	processor Processor
 	chain     *core.Blockchain // Blockchain wrapper
+	batch     batcher.Batch    // Batch for creating new block
 	event     *event.TypeMux
 	quitCh    chan struct{}
 
-	blockSub event.Subscription // Subscribe new block event
-	txsSub   event.Subscription // Subscribe new transactions event
+	execblockSub event.Subscription // Subscribe new block event
+	execTxsSub   event.Subscription // Execute pending txs event
 }
 
-func New(chain *core.Blockchain, statedb *state.StateDB) Executor {
+func New(chain *core.Blockchain, statedb *state.StateDB) *Executor {
 	processor := core.NewStateProcessor(chain, statedb)
-	executor := &ExecutorImpl{
+	executor := &Executor{
 		processor: processor,
 		chain:     chain,
 		event:     event.GetEventhub(),
 		quitCh:    make(chan struct{}),
-		validator: NewValidator(processor),
 	}
 	return executor
 }
 
-func (ex *ExecutorImpl) Start() error {
-	ex.blockSub = ex.event.Subscribe(&core.NewBlockEvent{})
-	ex.txsSub = ex.event.Subscribe(&core.NewTxsEvent{})
+func (ex *Executor) Start() error {
+	ex.execblockSub = ex.event.Subscribe(&core.ExecBlockEvent{})
+	ex.execTxsSub = ex.event.Subscribe(&core.ExecPendingTxEvent{})
 	go ex.listenBlock()
-	go ex.listenTx()
 }
 
-func (ex *ExecutorImpl) listenBlock() {
+func (ex *Executor) listenBlock() {
 	for {
 		select {
-		case ev := <-ex.blockSub.Chan():
-			block := ev.(*core.NewBlockEvent).Block
-			err := ex.validator.ValidateHeader(block)
-			if err != nil {
-
-			}
-
-			err = ex.validator.ValidateBody(block)
-		case ev := <-ex.txsSub.Chan():
-			txs := ev.(*core.NewTxsEvent).Txs
+		case ev := <-ex.execblockSub.Chan():
+			block := ev.(*core.ExecBlockEvent).Block
+			go ex.processBlock(block)
+		case ev := <-ex.execTxsSub.Chan():
+			txs := ev.(*core.ExecPendingTxEvent).Txs
+			go ex.processTx(txs)
 		case <-ex.quitCh:
-			ex.blockSub.Unsubscribe()
+			ex.execTxsSub.Unsubscribe()
+			return
 		}
 	}
 }
 
-func (ex *ExecutorImpl) listenTx() {
-	for {
-		select {
-		case ev := <-ex.txsSub.Chan():
-			tx := ev.(core.NewTxEvent).Tx
-			// TODO validate transaction
-		case <-ex.quitCh:
-			ex.txSub.Unsubscribe()
-		}
-	}
-}
-
-func (ex *ExecutorImpl) Stop() error {
+func (ex *Executor) Stop() error {
 	close(ex.quitCh)
+	return nil
 }
 
-func (ex *ExecutorImpl) process() {
+func (ex *Executor) genNewBlock(txs types.Transactions, receipts types.Receipts) (*types.Block, error) {
 
+}
+
+func (ex *Executor) processBlock(block *types.Block) {
+	receipts, err := ex.processor.Process(block)
+}
+
+// processTx execute transactions launched from tx_pool.
+// 1. Simulate execute every transaction sequentially, until gasUsed reaches blocks's gasLimit
+// 2. Collect valid txs and invalid txs
+// 3. Collect receipts (remove invalid receipts)
+func (ex *Executor) processTx(txs types.Transactions) {
 }

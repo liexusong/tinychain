@@ -7,11 +7,6 @@ import (
 	"tinychain/core/vm"
 )
 
-// Processor represents the interface of block processor
-type Processor interface {
-	Process(block *types.Block) (types.Receipts, error)
-}
-
 type StateProcessor struct {
 	bc      *Blockchain
 	statedb *state.StateDB
